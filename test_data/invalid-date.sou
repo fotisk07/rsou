@@ -1,0 +1,20 @@
+[JOURNAL]
+
+year: 2026
+
+[ACCOUNTS]
+
+Assets
+  Cash
+    Checking
+Liabilities
+Equity
+Income
+Expenses
+  Food
+
+[TRANSACTIONS]
+
+2026-02-30 Impossible date
+  Assets::Cash:Checking  -8.00
+  Expenses::Food  8.00
