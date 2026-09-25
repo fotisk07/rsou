@@ -16,5 +16,5 @@ Expenses
 [TRANSACTIONS]
 
 2026-02-30 Impossible date
-  Assets::Cash:Checking  -8.00
+  Assets::Cash::Checking  -8.00
   Expenses::Food  8.00
