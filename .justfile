@@ -1,8 +1,10 @@
-run:
-  @cargo fmt
-  @cargo check
-  @cargo run
+check:
+    @cargo fmt
+    @cargo check
+
+run *args: check
+    cargo run -- {{args}}
 
 test:
-  @cargo fmt
-  @cargo test
+    @cargo fmt
+    @cargo test
