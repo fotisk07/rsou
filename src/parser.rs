@@ -1,61 +1,96 @@
 use crate::models::{Account, Accounts, Journal, Posting, Transaction};
 use chrono::NaiveDate;
-use regex::Regex;
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
-pub fn parse_journal(journal_text: &str) -> Journal {
-    let accounts_section_re = Regex::new(r"(?s)\[ACCOUNTS\]\s*(.*?)\s*\[TRANSACTIONS\]").unwrap();
+#[derive(Debug)]
+pub struct ParseError {
+    pub line: Option<usize>,
+    pub message: String,
+}
 
-    let accounts_text = accounts_section_re
-        .captures(journal_text)
-        .unwrap()
-        .get(1)
-        .unwrap()
-        .as_str();
-    let transactions_text = journal_text
-        .split_once("[TRANSACTIONS]")
-        .map(|(_, rest)| rest.trim())
-        .unwrap();
+impl ParseError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            line: None,
+            message: message.into(),
+        }
+    }
 
-    let accounts = parse_accounts(accounts_text.to_string());
-    let transactions = parse_transactions(transactions_text.to_string());
-
-    Journal {
-        accounts,
-        transactions,
+    fn at(line: usize, message: impl Into<String>) -> Self {
+        Self {
+            line: Some(line),
+            message: message.into(),
+        }
     }
 }
 
-fn parse_accounts(accounts_text: String) -> Accounts {
+pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
+    let (before_accounts, sections_text) = journal_text
+        .split_once("[ACCOUNTS]")
+        .ok_or_else(|| ParseError::new("missing [ACCOUNTS] section"))?;
+
+    let (accounts_text, transactions_text) = sections_text
+        .split_once("[TRANSACTIONS]")
+        .ok_or_else(|| ParseError::new("missing [TRANSACTIONS] section"))?;
+
+    let accounts_line = before_accounts
+        .bytes()
+        .filter(|&byte| byte == b'\n')
+        .count()
+        + 1;
+    let transactions_line =
+        accounts_line + accounts_text.bytes().filter(|&byte| byte == b'\n').count();
+    let accounts = parse_accounts(accounts_text, accounts_line)?;
+    let transactions = parse_transactions(transactions_text, transactions_line)?;
+
+    Ok(Journal {
+        accounts,
+        transactions,
+    })
+}
+
+fn parse_accounts(accounts_text: &str, section_line: usize) -> Result<Accounts, ParseError> {
     let mut accounts = Accounts::new();
     let mut stack: Vec<String> = Vec::new();
 
-    for line in accounts_text.lines() {
+    for (index, line) in accounts_text.lines().enumerate() {
         if line.trim().is_empty() {
             continue;
         }
-
+        let line_number = section_line + index;
         let depth = line.chars().take_while(|c| *c == ' ').count() / 2;
         let name = line.trim().to_string();
 
+        if depth > stack.len() {
+            return Err(ParseError::at(line_number, "account is missing a parent"));
+        }
         stack.truncate(depth);
         stack.push(name.clone());
 
         if depth == 0 {
-            accounts.root_mut(&name).expect("Invalid root account");
+            accounts.root_mut(&name).ok_or_else(|| {
+                ParseError::at(line_number, format!("unknown root account `{name}`"))
+            })?;
             continue;
         }
 
         let root_name = &stack[0];
-        let mut parent = accounts.root_mut(root_name).expect("Unknown root account");
+        let mut parent = accounts.root_mut(root_name).ok_or_else(|| {
+            ParseError::at(line_number, format!("unknown root account `{root_name}`"))
+        })?;
 
         for parent_name in &stack[1..depth] {
             parent = parent
                 .children
                 .iter_mut()
                 .find(|account| account.name == *parent_name)
-                .expect("Parent account not found");
+                .ok_or_else(|| {
+                    ParseError::at(
+                        line_number,
+                        format!("parent account `{parent_name}` not found"),
+                    )
+                })?;
         }
 
         parent.children.push(Account {
@@ -63,35 +98,53 @@ fn parse_accounts(accounts_text: String) -> Accounts {
             children: vec![],
         });
     }
-    accounts
+    Ok(accounts)
 }
 
-fn parse_transactions(transactions_text: String) -> Vec<Transaction> {
+fn parse_transactions(
+    transactions_text: &str,
+    section_line: usize,
+) -> Result<Vec<Transaction>, ParseError> {
     let mut lines = transactions_text
         .lines()
-        .filter(|l| !l.trim().is_empty())
+        .enumerate()
+        .filter(|(_, line)| !line.trim().is_empty())
         .peekable();
 
     let mut transactions: Vec<Transaction> = vec![];
 
-    while let Some(header) = lines.next() {
+    while let Some((index, header)) = lines.next() {
+        let line_number = section_line + index;
         let (date_str, description) = header
             .split_once(char::is_whitespace)
-            .expect("invalid transaction header");
+            .ok_or_else(|| ParseError::at(line_number, "expected DATE DESCRIPTION"))?;
 
-        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").unwrap();
+        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|_| ParseError::at(line_number, format!("invalid date `{date_str}`")))?;
 
         let mut postings: Vec<Posting> = vec![];
 
-        while lines.peek().is_some_and(|l| l.starts_with(" ")) {
-            let posting_line = lines.next().unwrap();
+        while lines.peek().is_some_and(|(_, line)| line.starts_with(' ')) {
+            let (index, posting_line) = lines.next().unwrap(); // Safe: peek found a posting.
+            let posting_line_number = section_line + index;
             let mut posting_parts = posting_line.split_whitespace();
-            let account_str = posting_parts.next().unwrap();
-            let amount_str = posting_parts.next().unwrap();
+            let account_str = posting_parts
+                .next()
+                .ok_or_else(|| ParseError::at(posting_line_number, "missing posting account"))?;
+            let amount_str = posting_parts
+                .next()
+                .ok_or_else(|| ParseError::at(posting_line_number, "missing posting amount"))?;
+
+            let amount = Decimal::from_str(amount_str).map_err(|_| {
+                ParseError::at(
+                    posting_line_number,
+                    format!("invalid amount `{amount_str}`"),
+                )
+            })?;
 
             postings.push(Posting {
                 account: account_str.to_string(),
-                amount: Decimal::from_str(amount_str).unwrap(),
+                amount,
             });
         }
         transactions.push(Transaction {
@@ -100,7 +153,7 @@ fn parse_transactions(transactions_text: String) -> Vec<Transaction> {
             postings,
         });
     }
-    transactions
+    Ok(transactions)
 }
 
 #[cfg(test)]
@@ -110,7 +163,7 @@ mod tests {
     #[test]
     fn parses_simple_journal() {
         let text = include_str!("../test_data/simple.sou");
-        let journal = parse_journal(text);
+        let journal = parse_journal(text).expect("Stuff");
 
         assert_eq!(journal.transactions.len(), 2);
         assert_eq!(journal.transactions[1].description, "Coffee and lunch");
@@ -119,16 +172,26 @@ mod tests {
     #[test]
     fn parses_split_journal() {
         let text = include_str!("../test_data/split.sou");
-        let journal = parse_journal(text);
+        let journal = parse_journal(text).expect("Stuff");
 
         assert_eq!(journal.transactions.len(), 3);
         assert_eq!(journal.transactions[1].postings.len(), 3);
     }
 
     #[test]
-    #[should_panic]
     fn parses_failed_journal() {
         let text = include_str!("../test_data/invalid-date.sou");
-        parse_journal(text);
+        let error = parse_journal(text).unwrap_err();
+        assert_eq!(error.line, Some(18));
+        assert_eq!(error.message, "invalid date `2026-02-30`");
+    }
+
+    #[test]
+    fn reports_invalid_amount_line() {
+        let text = include_str!("../test_data/simple.sou")
+            .replace("Expenses::Food  12.50", "Expenses::Food  invalid");
+        let error = parse_journal(&text).unwrap_err();
+        assert_eq!(error.line, Some(25));
+        assert_eq!(error.message, "invalid amount `invalid`");
     }
 }

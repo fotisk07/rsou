@@ -1,3 +1,4 @@
+use crate::validation::{ValidationError, validate_transaction};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
@@ -92,17 +93,10 @@ pub struct Journal {
     pub transactions: Vec<Transaction>,
 }
 impl Journal {
-    pub fn post(&mut self, transaction: Transaction) -> Option<()> {
-        let mut amount_counter = Decimal::from(0);
-        for posting in &transaction.postings {
-            self.accounts.find_account(&posting.account)?;
-            amount_counter += &posting.amount
-        }
-        if amount_counter != Decimal::ZERO {
-            return None;
-        }
+    pub fn post(&mut self, transaction: Transaction) -> Result<(), ValidationError> {
+        validate_transaction(&self.accounts, &transaction)?;
         self.transactions.push(transaction);
-        Some(())
+        Ok(())
     }
 }
 
@@ -154,7 +148,7 @@ mod tests {
             accounts,
             transactions: vec![],
         };
-        assert!(journal.post(valid_transaction).is_some());
+        assert!(journal.post(valid_transaction).is_ok());
 
         assert_eq!(journal.transactions.len(), 1);
     }
@@ -190,7 +184,7 @@ mod tests {
             ],
         };
 
-        assert!(journal.post(invalid_transaction).is_none());
+        assert!(journal.post(invalid_transaction).is_err());
         assert_eq!(journal.transactions.len(), 0);
     }
 }
