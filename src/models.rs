@@ -1,5 +1,5 @@
 use crate::validation::{ValidationError, validate_transaction};
-use chrono::NaiveDate;
+use jiff::civil::{Date, date};
 use rust_decimal::Decimal;
 
 #[derive(Debug)]
@@ -82,7 +82,7 @@ pub struct Posting {
 
 #[derive(Debug)]
 pub struct Transaction {
-    pub date: NaiveDate,
+    pub date: Date,
     pub description: String,
     pub postings: Vec<Posting>,
 }
@@ -131,7 +131,7 @@ mod tests {
         });
 
         let valid_transaction = Transaction {
-            date: NaiveDate::from_ymd_opt(2026, 9, 25).unwrap(),
+            date: date(2026, 9, 25),
             description: "Lunch".to_string(),
             postings: vec![
                 Posting {
@@ -170,7 +170,7 @@ mod tests {
             transactions: vec![],
         };
         let invalid_transaction = Transaction {
-            date: NaiveDate::from_ymd_opt(2026, 9, 25).unwrap(),
+            date: date(2026, 9, 25),
             description: "Lunch".to_string(),
             postings: vec![
                 Posting {

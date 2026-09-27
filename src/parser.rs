@@ -1,5 +1,5 @@
 use crate::models::{Account, Accounts, Journal, Posting, Transaction};
-use chrono::NaiveDate;
+use jiff::civil::Date;
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
@@ -119,7 +119,8 @@ fn parse_transactions(
             .split_once(char::is_whitespace)
             .ok_or_else(|| ParseError::at(line_number, "expected DATE DESCRIPTION"))?;
 
-        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        let date: Date = date_str
+            .parse()
             .map_err(|_| ParseError::at(line_number, format!("invalid date `{date_str}`")))?;
 
         let mut postings: Vec<Posting> = vec![];
