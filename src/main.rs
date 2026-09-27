@@ -18,6 +18,10 @@ enum Commands {
         #[arg(short, long, default_value = "journal.sou")]
         journal_path: String,
     },
+    Ledger {
+        #[arg(short, long, default_value = "journal.sou")]
+        journal_path: String,
+    },
 }
 fn main() {
     let cli = Cli::parse();
@@ -48,6 +52,12 @@ fn main() {
             }
 
             println!("{} is valid", &journal_path)
+        }
+        Commands::Ledger { journal_path } => {
+            let contents = fs::read_to_string(&journal_path).unwrap();
+            let journal = parser::parse_journal(&contents).unwrap();
+
+            dbg!(journal.transactions_for("Equity::OpeningBalances"));
         }
     }
 }

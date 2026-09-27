@@ -1,5 +1,5 @@
 use crate::validation::{ValidationError, validate_transaction};
-use jiff::civil::{Date, date};
+use jiff::civil::Date;
 use rust_decimal::Decimal;
 
 #[derive(Debug)]
@@ -98,11 +98,28 @@ impl Journal {
         self.transactions.push(transaction);
         Ok(())
     }
+    pub fn transactions_for(&self, path: &str) -> Option<Vec<&Transaction>> {
+        self.accounts.find_account(path)?; //discard account if not in the journal
+
+        let child_prefix = format!("{path}::");
+        Some(
+            self.transactions
+                .iter()
+                .filter(|transaction| {
+                    transaction.postings.iter().any(|posting| {
+                        posting.account == path || posting.account.starts_with(&child_prefix)
+                    })
+                })
+                .collect(),
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::models::*;
+    use crate::parser::parse_journal;
+    use jiff::civil::date;
 
     #[test]
     fn test_find_account() {
@@ -186,5 +203,57 @@ mod tests {
 
         assert!(journal.post(invalid_transaction).is_err());
         assert_eq!(journal.transactions.len(), 0);
+    }
+
+    #[test]
+    fn test_ledger() {
+        let journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
+
+        // A parent includes transactions posted to its child account.
+        let cash = journal.transactions_for("Assets::Cash").unwrap();
+        assert_eq!(cash.len(), 3);
+
+        let groceries = journal
+            .transactions_for("Expenses::Food::Groceries")
+            .unwrap();
+        assert_eq!(groceries.len(), 2);
+        assert_eq!(groceries[0].description, "Groceries and snacks");
+        assert_eq!(groceries[1].description, "Small refund");
+
+        // An unknown account is different from an existing account with no transactions.
+        assert!(journal.transactions_for("Expenses::Missing").is_none());
+        assert!(journal.transactions_for("Income").unwrap().is_empty());
+    }
+
+    #[test]
+    fn ledger_does_not_match_similar_account_names() {
+        let mut journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
+        journal.accounts.expenses.children.push(Account {
+            name: "Foodie".to_string(),
+            children: vec![],
+        });
+        journal
+            .post(Transaction {
+                date: date(2026, 2, 5),
+                description: "Foodie expense".to_string(),
+                postings: vec![
+                    Posting {
+                        account: "Assets::Cash::Checking".to_string(),
+                        amount: Decimal::from(-2),
+                    },
+                    Posting {
+                        account: "Expenses::Foodie".to_string(),
+                        amount: Decimal::from(2),
+                    },
+                ],
+            })
+            .unwrap();
+
+        let food = journal.transactions_for("Expenses::Food").unwrap();
+        assert_eq!(food.len(), 2);
+        assert!(
+            food.iter()
+                .all(|transaction| transaction.description != "Foodie expense")
+        );
     }
 }
