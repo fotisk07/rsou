@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 #[derive(Debug, PartialEq)]
 pub enum ValidationError {
     UnknownAccount(String),
-    Unbalanced(Decimal),
+    Unbalanced(String),
     NotEnoughPostings,
 }
 
@@ -23,7 +23,7 @@ pub fn validate_transaction(
         balance += posting.amount;
     }
     if balance != Decimal::ZERO {
-        return Err(ValidationError::Unbalanced(balance));
+        return Err(ValidationError::Unbalanced(transaction.description.clone()));
     }
     Ok(())
 }
@@ -37,9 +37,28 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ValidationError, validate_journal};
+    use super::{ValidationError, validate_journal, validate_transaction};
     use crate::parser::parse_journal;
     use rust_decimal::Decimal;
+
+    #[test]
+    fn valid_transaction() {
+        let journal = parse_journal(include_str!("../test_data/simple.sou")).unwrap();
+        assert_eq!(
+            validate_transaction(&journal.accounts, &journal.transactions[1]),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn unbalanced_transaction() {
+        let mut journal = parse_journal(include_str!("../test_data/simple.sou")).unwrap();
+        journal.transactions[1].postings[1].amount = Decimal::from(5);
+        assert_eq!(
+            validate_transaction(&journal.accounts, &journal.transactions[1]),
+            Err(ValidationError::Unbalanced("Coffee and lunch".to_string()))
+        );
+    }
 
     #[test]
     fn valid_parsed_journal() {
@@ -67,9 +86,7 @@ mod tests {
         let journal = parse_journal(&text).expect("Stuff");
         assert_eq!(
             validate_journal(&journal),
-            Err(ValidationError::Unbalanced(
-                Decimal::from_str_exact("-2.50").unwrap()
-            ))
+            Err(ValidationError::Unbalanced("Coffee and lunch".to_string()))
         );
     }
 
