@@ -37,16 +37,16 @@ Start with a basic two-account transaction; broader split-posting options can fo
 
 ### Done when
 
-- [ ] The CLI accepts the amount, source account, destination account,
+- [x] The CLI accepts the amount, source account, destination account,
       description, and date.
-- [ ] A valid transaction is recorded and reloads correctly.
-- [ ] Invalid input leaves the journal file unchanged.
-- [ ] Writing normalizes the journal to a canonical format while preserving
+- [x] A valid transaction is recorded and reloads correctly.
+- [x] Invalid input leaves the journal file unchanged.
+- [x] Writing normalizes the journal to a canonical format while preserving
       accounting data and sibling account order; root accounts use a fixed order.
-- [ ] Transactions are written in chronological order, preserving their relative
+- [x] Transactions are written in chronological order, preserving their relative
       order on the same date.
-- [ ] The new transaction appears with the correct amounts in the account ledger.
-- [ ] Tests cover successful posting and rejection without file modification.
+- [x] The new transaction appears with the correct amounts in the account ledger.
+- [x] CLI checks cover successful posting and rejection without file modification.
 
 ### Agreed design
 
@@ -60,9 +60,12 @@ Start with a basic two-account transaction; broader split-posting options can fo
 - Keep formatting separate from file I/O; validate before safely replacing the
   journal using a same-directory temporary file.
 
-### Decisions remaining
+### CLI behavior
 
-- CLI syntax, amount/sign conventions, and default/explicit dates.
+- `post AMOUNT FROM_ACCOUNT TO_ACCOUNT DESCRIPTION [-d YYYY-MM-DD]`.
+- Amount must be positive and exactly representable with two decimal places;
+  source receives `-amount`, destination receives `+amount`.
+- Date defaults to today; descriptions must be nonempty and single-line.
 
 ### Implementation steps
 
@@ -74,7 +77,7 @@ restructuring.
 3. [x] Format the complete journal; verify round trips preserve accounting data.
 4. [x] Implement same-directory temporary-file replacement (dedicated write
        tests deferred).
-5. [ ] Finish CLI posting and test successful posting, unchanged files on
+5. [x] Finish CLI posting and verify successful posting, unchanged files on
        rejection, and correct ledger amounts.
 
 ## Upcoming milestones

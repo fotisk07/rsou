@@ -23,7 +23,7 @@ fn format_transaction(transaction: &Transaction, text: &mut String) {
     }
 }
 
-pub fn format_journal(journal: &Journal) -> String {
+fn format_journal(journal: &Journal) -> String {
     // Metadata
     let mut text = format!(
         "[JOURNAL]\n\nname: {}\nyear: {}\ncurrency: {}\n\n",
@@ -52,7 +52,9 @@ pub fn format_journal(journal: &Journal) -> String {
     }
     text
 }
-pub fn write(path: &Path, journal_text: &str) -> io::Result<()> {
+pub fn write_journal(path: String, journal: &Journal) -> io::Result<()> {
+    let journal_text = format_journal(&journal);
+    let path = Path::new(&path);
     let directory = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())

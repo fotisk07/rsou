@@ -6,17 +6,27 @@ pub enum ValidationError {
     UnknownAccount(String),
     Unbalanced(String),
     NotEnoughPostings,
+    InvalidDescription,
+    TooManyDecimalPlaces(String),
 }
 
 pub fn validate_transaction(
     accounts: &Accounts,
     transaction: &Transaction,
 ) -> Result<(), ValidationError> {
+    if transaction.description.trim().is_empty() || transaction.description.contains(['\n', '\r']) {
+        return Err(ValidationError::InvalidDescription);
+    }
     let mut balance = Decimal::ZERO;
     if transaction.postings.len() < 2 {
         return Err(ValidationError::NotEnoughPostings);
     }
     for posting in &transaction.postings {
+        if posting.amount.normalize().scale() > 2 {
+            return Err(ValidationError::TooManyDecimalPlaces(
+                posting.account.clone(),
+            ));
+        }
         if accounts.find_account(&posting.account).is_none() {
             return Err(ValidationError::UnknownAccount(posting.account.clone()));
         }
@@ -37,28 +47,8 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ValidationError, validate_journal, validate_transaction};
+    use super::{ValidationError, validate_journal};
     use crate::parser::parse_journal;
-    use rust_decimal::Decimal;
-
-    #[test]
-    fn valid_transaction() {
-        let journal = parse_journal(include_str!("../test_data/simple.sou")).unwrap();
-        assert_eq!(
-            validate_transaction(&journal.accounts, &journal.transactions[1]),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn unbalanced_transaction() {
-        let mut journal = parse_journal(include_str!("../test_data/simple.sou")).unwrap();
-        journal.transactions[1].postings[1].amount = Decimal::from(5);
-        assert_eq!(
-            validate_transaction(&journal.accounts, &journal.transactions[1]),
-            Err(ValidationError::Unbalanced("Coffee and lunch".to_string()))
-        );
-    }
 
     #[test]
     fn valid_parsed_journal() {

@@ -85,6 +85,15 @@ pub struct Transaction {
     pub description: String,
     pub postings: Vec<Posting>,
 }
+impl Transaction {
+    pub fn new(date: Date, description: String, postings: Vec<Posting>) -> Self {
+        Self {
+            date,
+            description,
+            postings,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct JournalMetadata {
