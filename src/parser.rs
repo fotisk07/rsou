@@ -141,6 +141,13 @@ fn parse_transactions(
                 .next()
                 .ok_or_else(|| ParseError::at(posting_line_number, "missing posting amount"))?;
 
+            if posting_parts.next().is_some() {
+                return Err(ParseError::at(
+                    posting_line_number,
+                    "unexpected text after posting amount",
+                ));
+            }
+
             let amount = Decimal::from_str(amount_str).map_err(|_| {
                 ParseError::at(
                     posting_line_number,
@@ -257,6 +264,24 @@ mod tests {
         let error = parse_journal(text).unwrap_err();
         assert_eq!(error.line, Some(20));
         assert_eq!(error.message, "invalid date `2026-02-30`");
+    }
+
+    #[test]
+    fn rejects_text_after_posting_amount() {
+        let text = include_str!("../test_data/simple.sou").replace(
+            "Expenses::Food  12.50",
+            "Expenses::Food  12.50  something else",
+        );
+        let error = parse_journal(&text).unwrap_err();
+        assert_eq!(error.line, Some(27));
+        assert_eq!(error.message, "unexpected text after posting amount");
+    }
+
+    #[test]
+    fn allows_trailing_whitespace_after_posting_amount() {
+        let text = include_str!("../test_data/simple.sou")
+            .replace("Expenses::Food  12.50", "Expenses::Food  12.50  \t");
+        assert!(parse_journal(&text).is_ok());
     }
 
     #[test]
