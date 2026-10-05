@@ -3,6 +3,7 @@ mod output;
 mod parser;
 mod queries;
 mod validation;
+mod write;
 use crate::models::Journal;
 use crate::parser::parse_journal;
 use crate::validation::{ValidationError, validate_journal};

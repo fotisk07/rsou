@@ -1,7 +1,7 @@
 use jiff::civil::Date;
 use rust_decimal::Decimal;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Accounts {
     assets: Account,
     liabilities: Account,
@@ -67,33 +67,33 @@ impl Accounts {
         Some(current)
     }
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Account {
     pub name: String,
     pub children: Vec<Account>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Posting {
     pub account: String,
     pub amount: Decimal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Transaction {
     pub date: Date,
     pub description: String,
     pub postings: Vec<Posting>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct JournalMetadata {
     pub name: String,
     pub year: i32,
     pub currency: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Journal {
     pub metadata: JournalMetadata,
     pub accounts: Accounts,
