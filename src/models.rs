@@ -91,10 +91,17 @@ pub struct Journal {
     pub accounts: Accounts,
     pub transactions: Vec<Transaction>,
 }
+impl Journal {
+    pub fn sort_transactions(&mut self) {
+        self.transactions
+            .sort_by_key(|transaction| transaction.date);
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::parse_journal;
 
     #[test]
     fn test_find_account() {
@@ -106,5 +113,27 @@ mod tests {
 
         let account = accounts.find_account("Assets::test").unwrap();
         assert_eq!(account.name, "test");
+    }
+
+    #[test]
+    fn test_sort() {
+        let text = include_str!("../test_data/unorder.sou");
+        let mut journal = parse_journal(text).expect("Stuff");
+
+        journal.sort_transactions();
+
+        assert!(journal.transactions[0].description == "Opening balance")
+    }
+
+    #[test]
+    fn test_sort_no_change_order() {
+        let text = include_str!("../test_data/simple.sou");
+        let mut journal = parse_journal(text).expect("Stuff");
+        let same_date = journal.transactions[0].date;
+        journal.transactions[1].date = same_date;
+
+        journal.sort_transactions();
+
+        assert!(journal.transactions[0].description == "Opening balance")
     }
 }

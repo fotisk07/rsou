@@ -1,0 +1,25 @@
+[JOURNAL]
+
+year: 2026
+
+[ACCOUNTS]
+
+Assets
+  Cash
+    Checking
+Liabilities
+Equity
+  OpeningBalances
+Income
+Expenses
+  Food
+
+[TRANSACTIONS]
+
+2026-01-02 Coffee and lunch
+  Assets::Cash::Checking  -12.50
+  Expenses::Food  12.50
+
+2026-01-01 Opening balance
+  Equity::OpeningBalances  -100.00
+  Assets::Cash::Checking  100.00
