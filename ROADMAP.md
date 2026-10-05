@@ -48,46 +48,33 @@ Start with a basic two-account transaction; broader split-posting options can fo
 - [ ] The new transaction appears with the correct amounts in the account ledger.
 - [ ] Tests cover successful posting and rejection without file modification.
 
-### Agreed architecture
+### Agreed design
 
-- Parse without changing file order; sort transactions explicitly before writing.
-- Rewrite the complete journal in a canonical format rather than preserving
-  handwritten whitespace. Manual edits remain supported on the next read.
-- Use a stable date sort so same-date transactions retain their relative order.
-- Separate pure journal formatting from filesystem writes.
-- Validate before writing, then replace the journal using a temporary file in
-  the same directory. Never delete the original before replacement.
-- A standalone `format` command is optional and must not delay posting.
+- Rewrite the whole journal in canonical format; manual edits remain supported.
+- Sort explicitly before writing, preserving same-date transaction order.
+- Preserve required `name`, `year`, and `currency` metadata; year is informational.
+- Use fixed root-account order and preserve sibling account order.
+- Use two-space indentation, two spaces between posting account and amount,
+  exactly two decimal places, blank lines between sections and transactions,
+  and a final newline.
+- Keep formatting separate from file I/O; validate before safely replacing the
+  journal using a same-directory temporary file.
 
-### Decisions to make
+### Decisions remaining
 
-- CLI syntax and amount/sign conventions.
-- Default date and explicit date syntax.
-- Canonical account and transaction text format, including the header metadata
-  currently ignored by the parser and a fixed root-account order.
-- Handling comments or other text not represented in the journal model:
-  inspect parser behavior before implementing full rewriting.
-- File-writing safety, permissions, concurrent edits, and handling write failures.
+- CLI syntax, amount/sign conventions, and default/explicit dates.
 
 ### Implementation steps
 
-Keep steps small and explain any new Rust constructs as they are introduced.
-Avoid unrelated restructuring; the user will implement the code with guidance.
+The user implements the code with guidance. Keep steps small and avoid unrelated
+restructuring.
 
-1. [ ] Inspect the parser and fixtures; agree on the canonical format and what
-       information rewriting retains or discards.
-2. [ ] Add explicit stable transaction sorting, with tests for out-of-order
-       dates and unchanged relative order on the same date.
-3. [ ] Add pure journal formatting, preserving sibling account order. Test parse/format
-       round trips and formatting idempotence.
-4. [ ] Add safe file replacement using a same-directory temporary file, with
-       tests for successful replacement and failures leaving the original intact.
-5. [ ] Complete CLI input and transaction construction/validation, including
-       description and date. Reuse sorting, formatting, and safe writing.
-6. [ ] Test successful posting, rejection without modification, backdated
-       posting, and correct amounts in the ledger.
-7. [ ] Optionally expose the same sorting/formatting/writing pipeline through
-       a `format` command.
+1. [x] Agree on the canonical journal format.
+2. [x] Add stable transaction sorting and required metadata parsing.
+3. [ ] Format the complete journal; verify round trips preserve accounting data.
+4. [ ] Safely replace the journal file.
+5. [ ] Finish CLI posting and test successful posting, unchanged files on
+       rejection, and correct ledger amounts.
 
 ## Upcoming milestones
 
