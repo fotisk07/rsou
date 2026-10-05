@@ -1,6 +1,8 @@
 [JOURNAL]
 
+name: Test journal
 year: 2026
+currency: EUR
 
 [ACCOUNTS]
 

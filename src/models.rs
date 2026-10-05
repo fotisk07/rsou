@@ -87,7 +87,15 @@ pub struct Transaction {
 }
 
 #[derive(Debug)]
+pub struct JournalMetadata {
+    pub name: String,
+    pub year: i32,
+    pub currency: String,
+}
+
+#[derive(Debug)]
 pub struct Journal {
+    pub metadata: JournalMetadata,
     pub accounts: Accounts,
     pub transactions: Vec<Transaction>,
 }

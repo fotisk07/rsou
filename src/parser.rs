@@ -1,4 +1,4 @@
-use crate::models::{Account, Accounts, Journal, Posting, Transaction};
+use crate::models::{Account, Accounts, Journal, JournalMetadata, Posting, Transaction};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -29,11 +29,14 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
     let (before_accounts, sections_text) = journal_text
         .split_once("[ACCOUNTS]")
         .ok_or_else(|| ParseError::new("missing [ACCOUNTS] section"))?;
-
+    let (before_journal, metadata_text) = before_accounts
+        .split_once("[JOURNAL]")
+        .ok_or_else(|| ParseError::new("missing [JOURNAL] section"))?;
     let (accounts_text, transactions_text) = sections_text
         .split_once("[TRANSACTIONS]")
         .ok_or_else(|| ParseError::new("missing [TRANSACTIONS] section"))?;
 
+    let metadata_line = before_journal.bytes().filter(|&byte| byte == b'\n').count() + 1;
     let accounts_line = before_accounts
         .bytes()
         .filter(|&byte| byte == b'\n')
@@ -43,8 +46,10 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
         accounts_line + accounts_text.bytes().filter(|&byte| byte == b'\n').count();
     let accounts = parse_accounts(accounts_text, accounts_line)?;
     let transactions = parse_transactions(transactions_text, transactions_line)?;
+    let metadata = parse_metadata(metadata_text, metadata_line)?;
 
     Ok(Journal {
+        metadata,
         accounts,
         transactions,
     })
@@ -157,6 +162,73 @@ fn parse_transactions(
     Ok(transactions)
 }
 
+fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetadata, ParseError> {
+    let mut name: Option<String> = None;
+    let mut year: Option<i32> = None;
+    let mut currency: Option<String> = None;
+    for (index, line) in header_text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let line_number = section_line + index;
+        let (key, value) = line
+            .split_once(":")
+            .ok_or_else(|| ParseError::at(line_number, "expected metadata KEY: VALUE"))?;
+        let key = key.trim();
+        let value = value.trim();
+
+        match key {
+            "name" => {
+                if name.is_some() {
+                    return Err(ParseError::at(line_number, "Duplicate key metadata"));
+                }
+                if value.is_empty() {
+                    return Err(ParseError::at(line_number, "No values"));
+                }
+                name = Some(value.to_string());
+            }
+            "year" => {
+                if year.is_some() {
+                    return Err(ParseError::at(line_number, "Duplicate key metadata"));
+                }
+                let parsed_year = value
+                    .parse::<i32>()
+                    .map_err(|_| ParseError::at(line_number, "year must be an integer"))?;
+                if !(1..=9999).contains(&parsed_year) {
+                    return Err(ParseError::at(
+                        line_number,
+                        "year must be between 1 and 9999",
+                    ));
+                }
+                year = Some(parsed_year);
+            }
+            "currency" => {
+                if currency.is_some() {
+                    return Err(ParseError::at(line_number, "Duplicate key metadata"));
+                }
+                if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_uppercase()) {
+                    return Err(ParseError::at(
+                        line_number,
+                        "currency must be three uppercase ASCII letters",
+                    ));
+                }
+                currency = Some(value.to_string());
+            }
+            _ => {
+                return Err(ParseError::at(
+                    line_number,
+                    format!("unknown metadata field `{key}`"),
+                ));
+            }
+        }
+    }
+    Ok(JournalMetadata {
+        name: name.ok_or_else(|| ParseError::new("missing metadata field `name`"))?,
+        year: year.ok_or_else(|| ParseError::new("missing metadata field `year`"))?,
+        currency: currency.ok_or_else(|| ParseError::new("missing metadata field `currency`"))?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::parse_journal;
@@ -183,7 +255,7 @@ mod tests {
     fn parses_failed_journal() {
         let text = include_str!("../test_data/invalid-date.sou");
         let error = parse_journal(text).unwrap_err();
-        assert_eq!(error.line, Some(18));
+        assert_eq!(error.line, Some(20));
         assert_eq!(error.message, "invalid date `2026-02-30`");
     }
 
@@ -192,7 +264,7 @@ mod tests {
         let text = include_str!("../test_data/simple.sou")
             .replace("Expenses::Food  12.50", "Expenses::Food  invalid");
         let error = parse_journal(&text).unwrap_err();
-        assert_eq!(error.line, Some(25));
+        assert_eq!(error.line, Some(27));
         assert_eq!(error.message, "invalid amount `invalid`");
     }
 }
