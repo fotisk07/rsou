@@ -1,4 +1,7 @@
 use crate::models::{Account, Journal, Transaction};
+use std::io::{self, Write};
+use std::path::Path;
+use tempfile::NamedTempFile;
 
 fn format_account(account: &Account, depth: usize, text: &mut String) {
     text.push_str(&"  ".repeat(depth));
@@ -48,6 +51,19 @@ pub fn format_journal(journal: &Journal) -> String {
         format_transaction(transaction, &mut text);
     }
     text
+}
+pub fn write(path: &Path, journal_text: &str) -> io::Result<()> {
+    let directory = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+
+    let mut file = NamedTempFile::new_in(directory)?;
+    file.write_all(journal_text.as_bytes())?;
+    file.as_file().sync_all()?;
+    file.persist(path).map_err(|error| error.error)?;
+
+    Ok(())
 }
 
 #[cfg(test)]

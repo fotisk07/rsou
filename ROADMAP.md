@@ -72,7 +72,8 @@ restructuring.
 1. [x] Agree on the canonical journal format.
 2. [x] Add stable transaction sorting and required metadata parsing.
 3. [x] Format the complete journal; verify round trips preserve accounting data.
-4. [ ] Safely replace the journal file.
+4. [x] Implement same-directory temporary-file replacement (dedicated write
+       tests deferred).
 5. [ ] Finish CLI posting and test successful posting, unchanged files on
        rejection, and correct ledger amounts.
 
