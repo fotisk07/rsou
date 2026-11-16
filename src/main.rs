@@ -7,7 +7,7 @@ mod write;
 
 use crate::models::{Journal, Posting, Transaction};
 use crate::parser::parse_journal;
-use crate::validation::{ValidationError, validate_journal, validate_transaction};
+use crate::validation::{validate_journal, validate_transaction};
 use clap::{Parser, Subcommand};
 use jiff::Zoned;
 use jiff::civil::Date;
@@ -102,7 +102,7 @@ fn main() {
             match validate_transaction(&journal.accounts, &transaction) {
                 Ok(()) => {}
                 Err(error) => {
-                    eprintln!("invalid transaction: {error:?}");
+                    eprintln!("invalid transaction: {error}");
                     std::process::exit(1);
                 }
             }
@@ -112,7 +112,7 @@ fn main() {
             match write::write_journal(journal_path, &journal) {
                 Ok(()) => {}
                 Err(error) => {
-                    eprintln!("failed saving: {error:?}");
+                    eprintln!("failed saving: {error}");
                     std::process::exit(1);
                 }
             };
@@ -129,25 +129,7 @@ fn load_journal(path: &str) -> Result<Journal, String> {
         None => format!("parse error: {}", error.message),
     })?;
 
-    validate_journal(&journal).map_err(|error| match error {
-        ValidationError::UnknownAccount(account) => {
-            format!("validation error: unknown account `{account}`")
-        }
-        ValidationError::Unbalanced(description) => {
-            format!("validation error: unbalanced transaction `{description}`")
-        }
-        ValidationError::NotEnoughPostings => {
-            "validation error: transaction needs at least two postings".to_string()
-        }
-        ValidationError::InvalidDescription => {
-            "validation error: description must be nonempty and contain no line breaks".to_string()
-        }
-        ValidationError::TooManyDecimalPlaces(account) => {
-            format!(
-                "validation error: amount for `{account}` requires more than two decimal places"
-            )
-        }
-    })?;
+    validate_journal(&journal).map_err(|error| format!("validation error: {error}"))?;
 
     Ok(journal)
 }

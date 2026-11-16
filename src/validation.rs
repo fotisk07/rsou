@@ -1,5 +1,6 @@
 use crate::models::{Accounts, Journal, Transaction};
 use rust_decimal::Decimal;
+use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum ValidationError {
@@ -8,6 +9,27 @@ pub enum ValidationError {
     NotEnoughPostings,
     InvalidDescription,
     TooManyDecimalPlaces(String),
+}
+
+impl fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValidationError::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
+            ValidationError::Unbalanced(description) => {
+                write!(f, "unbalanced transaction `{description}`")
+            }
+            ValidationError::NotEnoughPostings => {
+                write!(f, "transaction needs at least two postings")
+            }
+            ValidationError::InvalidDescription => {
+                write!(f, "description must be nonempty and contain no line breaks")
+            }
+            ValidationError::TooManyDecimalPlaces(account) => write!(
+                f,
+                "amount for `{account}` requires more than two decimal places"
+            ),
+        }
+    }
 }
 
 pub fn validate_transaction(
@@ -87,6 +109,18 @@ mod tests {
         assert_eq!(
             validate_journal(&journal),
             Err(ValidationError::NotEnoughPostings)
+        );
+    }
+
+    #[test]
+    fn errors_read_as_sentences() {
+        assert_eq!(
+            ValidationError::UnknownAccount("Expenses::Missing".to_string()).to_string(),
+            "unknown account `Expenses::Missing`"
+        );
+        assert_eq!(
+            ValidationError::NotEnoughPostings.to_string(),
+            "transaction needs at least two postings"
         );
     }
 }
