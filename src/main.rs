@@ -71,15 +71,11 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             Ok(Some("Journal sorted.\n".to_string()))
         }
         Commands::List => Ok(Some(write::format_accounts(&journal.accounts))),
-        Commands::Add {
-            account_type,
-            account,
-        } => {
-            let path = format!("{}/{}", account_type.root_name(), account);
+        Commands::Add { account: path } => {
             validate_account_path(&path).map_err(|error| format!("invalid account: {error}"))?;
             let (parent_path, name) = path
                 .rsplit_once('/')
-                .expect("root prefix includes separator");
+                .ok_or_else(|| "specify a full account path, e.g. Assets/Bank".to_string())?;
             let parent = journal
                 .accounts
                 .find_account_mut(parent_path)

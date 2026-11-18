@@ -1,13 +1,20 @@
-use crate::{cli::AccountType, load_journal, models::Account};
-use clap::ValueEnum;
+use crate::{load_journal, models::Account};
 use clap_complete::CompletionCandidate;
 use std::ffi::{OsStr, OsString};
 
 pub fn accounts(current: &OsStr) -> Vec<CompletionCandidate> {
+    complete_accounts(current, false)
+}
+
+pub fn account_parents(current: &OsStr) -> Vec<CompletionCandidate> {
+    complete_accounts(current, true)
+}
+
+fn complete_accounts(current: &OsStr, adding: bool) -> Vec<CompletionCandidate> {
     let Some(prefix) = current.to_str() else {
         return Vec::new();
     };
-    let (path, _) = completion_context();
+    let path = journal_path();
     let Some(path) = path.to_str() else {
         return Vec::new();
     };
@@ -20,7 +27,7 @@ pub fn accounts(current: &OsStr) -> Vec<CompletionCandidate> {
         return ["Assets", "Liabilities", "Equity", "Income", "Expenses"]
             .into_iter()
             .filter_map(|root| journal.accounts.find_account(root))
-            .filter_map(|account| complete_component(account, base, partial, false))
+            .filter_map(|account| complete_component(account, base, partial, adding))
             .collect();
     }
     let Some(parent) = journal.accounts.find_account(base.trim_end_matches('/')) else {
@@ -29,44 +36,7 @@ pub fn accounts(current: &OsStr) -> Vec<CompletionCandidate> {
     parent
         .children
         .iter()
-        .filter_map(|account| complete_component(account, base, partial, false))
-        .collect()
-}
-
-pub fn account_parents(current: &OsStr) -> Vec<CompletionCandidate> {
-    let (path, positionals) = completion_context();
-    let [command, account_type] = positionals.as_slice() else {
-        return Vec::new();
-    };
-    if command != "add" {
-        return Vec::new();
-    }
-    let (Some(prefix), Some(path), Some(account_type)) =
-        (current.to_str(), path.to_str(), account_type.to_str())
-    else {
-        return Vec::new();
-    };
-    let Ok(account_type) = AccountType::from_str(account_type, false) else {
-        return Vec::new();
-    };
-    let Ok(journal) = load_journal(path) else {
-        return Vec::new();
-    };
-
-    let root = account_type.root_name();
-    let (base, partial) = split_path(prefix);
-    let parent_path = if base.is_empty() {
-        root.to_string()
-    } else {
-        format!("{root}/{}", base.trim_end_matches('/'))
-    };
-    let Some(account) = journal.accounts.find_account(&parent_path) else {
-        return Vec::new();
-    };
-    account
-        .children
-        .iter()
-        .filter_map(|child| complete_component(child, base, partial, true))
+        .filter_map(|account| complete_component(account, base, partial, adding))
         .collect()
 }
 
@@ -97,7 +67,7 @@ fn complete_component(
 
 // CompleteEnv passes the shell's command words after `--`. Only inspect words
 // before the cursor, so a later journal option cannot affect earlier completion.
-fn completion_context() -> (OsString, Vec<OsString>) {
+fn journal_path() -> OsString {
     let cursor = std::env::var("_CLAP_COMPLETE_INDEX")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -108,10 +78,8 @@ fn completion_context() -> (OsString, Vec<OsString>) {
         .take(cursor)
         .skip(1);
     let mut path = OsString::from("journal.sou");
-    let mut positionals = Vec::new();
     while let Some(word) = words.next() {
         if word == "--" {
-            positionals.extend(words);
             break;
         }
         if word == "-j" || word == "--journal-path" {
@@ -124,9 +92,7 @@ fn completion_context() -> (OsString, Vec<OsString>) {
                 .or_else(|| word.strip_prefix("-j").filter(|value| !value.is_empty()))
         {
             path = value.into();
-        } else {
-            positionals.push(word);
         }
     }
-    (path, positionals)
+    path
 }

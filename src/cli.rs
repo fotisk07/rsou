@@ -2,7 +2,7 @@ use crate::{
     completion,
     dates::{DateRequest, PeriodShortcut},
 };
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand};
 use clap_complete::ArgValueCompleter;
 use jiff::Zoned;
 use rust_decimal::Decimal;
@@ -72,10 +72,7 @@ pub(crate) enum Commands {
     /// Add an account under an existing parent.
     #[command(display_order = 7)]
     Add {
-        /// a=assets, l=liabilities, eq=equity, i=income, e=expenses.
-        #[arg(value_enum)]
-        account_type: AccountType,
-        /// Path within the type, e.g. Bank/Checking.
+        /// Full account path, e.g. Assets/Bank/Checking.
         #[arg(add = ArgValueCompleter::new(completion::account_parents))]
         account: String,
     },
@@ -218,32 +215,6 @@ impl PeriodShortcuts {
                 last_month: true, ..
             } => Some(PeriodShortcut::LastMonth),
             _ => None,
-        }
-    }
-}
-
-#[derive(Clone, ValueEnum)]
-pub(crate) enum AccountType {
-    #[value(name = "a")]
-    Assets,
-    #[value(name = "l")]
-    Liabilities,
-    #[value(name = "eq")]
-    Equity,
-    #[value(name = "i")]
-    Income,
-    #[value(name = "e")]
-    Expenses,
-}
-
-impl AccountType {
-    pub(crate) fn root_name(&self) -> &'static str {
-        match self {
-            Self::Assets => "Assets",
-            Self::Liabilities => "Liabilities",
-            Self::Equity => "Equity",
-            Self::Income => "Income",
-            Self::Expenses => "Expenses",
         }
     }
 }
