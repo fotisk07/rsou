@@ -1,7 +1,8 @@
 use crate::queries::{BsReport, LedgerEntry, PnlReport};
+use rust_decimal::Decimal;
 use tabled::{
     builder::Builder,
-    settings::{Alignment, Modify, Style, object::Columns},
+    settings::{Alignment, Modify, Style, object::Columns, style::HorizontalLine},
 };
 
 pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
@@ -41,38 +42,98 @@ pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
 pub fn format_pnl(report: &PnlReport) -> String {
     let mut builder = Builder::default();
     builder.push_record(["Account", "Amount"]);
-    for row in &report.rows {
-        builder.push_record([
-            format!("{}{}", "  ".repeat(row.depth), row.account),
-            format!("{:.2}", row.amount),
-        ]);
+    let expenses_start = report
+        .rows
+        .iter()
+        .position(|row| row.depth == 0 && row.account == "Expenses")
+        .unwrap_or(report.rows.len());
+    let (income, expenses) = report.rows.split_at(expenses_start);
+
+    for (name, rows) in [("Income", income), ("Expenses", expenses)] {
+        if name == "Expenses" {
+            builder.push_record(["", ""]);
+        }
+        builder.push_record([name.to_uppercase(), String::new()]);
+        let mut total = Decimal::ZERO;
+        for row in rows {
+            if row.depth == 0 {
+                total = row.amount;
+            } else {
+                builder.push_record([
+                    format!("{}{}", "  ".repeat(row.depth), row.account),
+                    format_report_amount(row.amount),
+                ]);
+            }
+        }
+        builder.push_record([format!("Total {name}"), format_report_amount(total)]);
     }
-    builder.push_record([String::new(), String::new()]);
+    let result_row = builder.count_records();
     builder.push_record([
         "Net Result".to_string(),
-        format!("{:.2}", report.net_result),
+        format_report_amount(report.net_result),
     ]);
 
     let mut table = builder.build();
-    table.with(Style::blank());
+    table.with(Style::blank().horizontals([
+        (1, HorizontalLine::new('─').intersection('─')),
+        (result_row, HorizontalLine::new('─').intersection('─')),
+    ]));
     table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
-    format!("Profit and loss\n\n{table}\n")
+    format!("Profit and Loss\n\n{table}\n")
+}
+
+fn format_report_amount(amount: Decimal) -> String {
+    let text = format!("{:.2}", amount.abs());
+    let (integer, fraction) = text.split_once('.').expect("fixed two-decimal amount");
+    let mut grouped = String::new();
+    if amount < Decimal::ZERO {
+        grouped.push('-');
+    }
+    for (index, digit) in integer.chars().enumerate() {
+        if index > 0 && (integer.len() - index).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    format!("{grouped}.{fraction}")
 }
 
 pub fn format_bs(report: &BsReport) -> String {
     let mut builder = Builder::default();
     builder.push_record(["Account", "Amount"]);
-    for row in &report.rows {
+    let mut rows = report.rows.iter().peekable();
+    let mut liabilities_and_equity = Decimal::ZERO;
+    while let Some(root) = rows.next() {
+        if root.account != "Assets" {
+            builder.push_record(["", ""]);
+            liabilities_and_equity += root.amount;
+        }
+        builder.push_record([root.account.to_uppercase(), String::new()]);
+        while rows.peek().is_some_and(|row| row.depth > 0) {
+            let row = rows.next().expect("peek found a detail row");
+            builder.push_record([
+                format!("{}{}", "  ".repeat(row.depth), row.account),
+                format_report_amount(row.amount),
+            ]);
+        }
         builder.push_record([
-            format!("{}{}", "  ".repeat(row.depth), row.account),
-            format!("{:.2}", row.amount),
+            format!("Total {}", root.account),
+            format_report_amount(root.amount),
         ]);
     }
+    let total_row = builder.count_records();
+    builder.push_record([
+        "Total Liabilities and Equity".to_string(),
+        format_report_amount(liabilities_and_equity),
+    ]);
 
     let mut table = builder.build();
-    table.with(Style::blank());
+    table.with(Style::blank().horizontals([
+        (1, HorizontalLine::new('─').intersection('─')),
+        (total_row, HorizontalLine::new('─').intersection('─')),
+    ]));
     table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
-    format!("Balance sheet\n\n{table}\n")
+    format!("Balance Sheet\n\n{table}\n")
 }
 
 #[cfg(test)]

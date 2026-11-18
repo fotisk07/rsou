@@ -101,7 +101,8 @@ fn pnl_account(
     }
 
     let mut rows = Vec::new();
-    if !total.is_zero() {
+    // Keep section boundaries even when a root totals zero; hide zero detail rows.
+    if depth == 0 || !total.is_zero() {
         rows.push(PnlRow {
             account: account.name.clone(),
             depth,
@@ -179,7 +180,8 @@ fn bs_account(
     }
 
     let mut rows = Vec::new();
-    if !total.is_zero() {
+    // Keep section boundaries even when a root totals zero; hide zero detail rows.
+    if depth == 0 || !total.is_zero() {
         rows.push(BsRow {
             account: account.name.clone(),
             depth,
