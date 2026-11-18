@@ -63,6 +63,7 @@ pub(crate) enum Commands {
         shortcuts: PeriodShortcuts,
     },
     Post {
+        #[arg(allow_negative_numbers = true)]
         amount: Decimal,
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         from_account: String,

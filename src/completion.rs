@@ -59,13 +59,12 @@ fn journal_path() -> OsString {
             if let Some(value) = words.next() {
                 path = value;
             }
-        } else if let Some(word) = word.to_str() {
-            if let Some(value) = word
+        } else if let Some(word) = word.to_str()
+            && let Some(value) = word
                 .strip_prefix("--journal-path=")
                 .or_else(|| word.strip_prefix("-j").filter(|value| !value.is_empty()))
-            {
-                path = value.into();
-            }
+        {
+            path = value.into();
         }
     }
     path
