@@ -1,4 +1,4 @@
-use crate::queries::{LedgerEntry, PnlReport};
+use crate::queries::{BsReport, LedgerEntry, PnlReport};
 use tabled::{
     builder::Builder,
     settings::{Alignment, Modify, Style, object::Columns},
@@ -57,6 +57,22 @@ pub fn format_pnl(report: &PnlReport) -> String {
     table.with(Style::blank());
     table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
     format!("Profit and loss\n\n{table}\n")
+}
+
+pub fn format_bs(report: &BsReport) -> String {
+    let mut builder = Builder::default();
+    builder.push_record(["Account", "Amount"]);
+    for row in &report.rows {
+        builder.push_record([
+            format!("{}{}", "  ".repeat(row.depth), row.account),
+            format!("{:.2}", row.amount),
+        ]);
+    }
+
+    let mut table = builder.build();
+    table.with(Style::blank());
+    table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
+    format!("Balance sheet\n\n{table}\n")
 }
 
 #[cfg(test)]

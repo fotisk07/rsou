@@ -30,6 +30,7 @@ enum Commands {
     Sort,
     Check,
     Pnl,
+    Bs,
     Ledger {
         account: String,
     },
@@ -65,6 +66,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
         }
         Commands::Check => Ok(Some(format!("{} is valid\n", cli.journal_path))),
         Commands::Pnl => Ok(Some(output::format_pnl(&queries::pnl(&journal)))),
+        Commands::Bs => Ok(Some(output::format_bs(&queries::bs(&journal)))),
         Commands::Ledger { account } => {
             let entries = queries::ledger_entries(&journal, &account)
                 .ok_or_else(|| format!("unknown account `{account}`"))?;

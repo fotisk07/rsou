@@ -112,6 +112,84 @@ fn pnl_account(
     (total, rows)
 }
 
+pub struct BsRow {
+    pub account: String,
+    pub depth: usize,
+    pub amount: Decimal,
+}
+
+pub struct BsReport {
+    pub rows: Vec<BsRow>,
+}
+
+/// Summarize accumulated balances across all transactions, including net result in equity.
+pub fn bs(journal: &Journal) -> BsReport {
+    let mut balances = HashMap::new();
+    for transaction in &journal.transactions {
+        for posting in &transaction.postings {
+            *balances
+                .entry(posting.account.as_str())
+                .or_insert(Decimal::ZERO) += posting.amount;
+        }
+    }
+
+    // Both reports currently include all dates. This is accumulated, not period profit.
+    let net_result = pnl(journal).net_result;
+    // Include the calculated result in equity's total without changing the journal.
+    *balances.entry("Equity").or_insert(Decimal::ZERO) -= net_result;
+
+    let mut rows = Vec::new();
+    for root in ["Assets", "Liabilities", "Equity"] {
+        let account = journal
+            .accounts
+            .find_account(root)
+            .expect("built-in root account");
+        let (_, mut section) = bs_account(account, root, 0, &balances);
+        if root != "Assets" {
+            for row in &mut section {
+                row.amount = -row.amount;
+            }
+        }
+        rows.extend(section);
+        if root == "Equity" && !net_result.is_zero() {
+            rows.push(BsRow {
+                account: "Net Result".to_string(),
+                depth: 1,
+                amount: net_result,
+            });
+        }
+    }
+
+    BsReport { rows }
+}
+
+fn bs_account(
+    account: &Account,
+    path: &str,
+    depth: usize,
+    balances: &HashMap<&str, Decimal>,
+) -> (Decimal, Vec<BsRow>) {
+    let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
+    let mut descendants = Vec::new();
+    for child in &account.children {
+        let child_path = format!("{path}::{}", child.name);
+        let (child_total, child_rows) = bs_account(child, &child_path, depth + 1, balances);
+        total += child_total;
+        descendants.extend(child_rows);
+    }
+
+    let mut rows = Vec::new();
+    if !total.is_zero() {
+        rows.push(BsRow {
+            account: account.name.clone(),
+            depth,
+            amount: total,
+        });
+    }
+    rows.extend(descendants);
+    (total, rows)
+}
+
 #[cfg(test)]
 mod tests {
     use super::ledger_entries;
