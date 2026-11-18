@@ -18,22 +18,26 @@ pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
             entry.date.to_string(),
             entry.account.clone(),
             entry.description.clone(),
-            format!("{:.2}", entry.amount),
-            format!("{:.2}", entry.balance),
+            format_report_amount(entry.amount),
+            format_report_amount(entry.balance),
         ]);
     }
 
     let closing = entries.last().unwrap().balance; // Entries are nonempty here.
+    let closing_row = builder.count_records();
     builder.push_record([
         String::new(),
         String::new(),
         "Closing balance".to_string(),
         String::new(),
-        format!("{closing:.2}"),
+        format_report_amount(closing),
     ]);
 
     let mut table = builder.build();
-    table.with(Style::blank());
+    table.with(Style::blank().horizontals([
+        (1, HorizontalLine::new('─').intersection('─')),
+        (closing_row, HorizontalLine::new('─').intersection('─')),
+    ]));
     table.with(Modify::new(Columns::new(3..5)).with(Alignment::right()));
 
     format!("Ledger — {account}\n\n{table}\n")
