@@ -13,6 +13,9 @@ pub struct DateRequest<'a> {
     pub from: Option<&'a str>,
     pub to: Option<&'a str>,
     pub shortcut: Option<PeriodShortcut>,
+    /// Period reports default to the current month only for current-year journals.
+    /// Leave false for cumulative reports such as a balance sheet.
+    pub default_to_current_month: bool,
 }
 
 impl DateRequest<'_> {
@@ -23,6 +26,13 @@ impl DateRequest<'_> {
                 return Err("date shortcuts cannot be combined with from/to dates".to_string());
             }
             return shortcut.resolve(year, today);
+        }
+        if self.default_to_current_month
+            && self.from.is_none()
+            && self.to.is_none()
+            && year == i32::from(today.year())
+        {
+            return PeriodShortcut::Month(today.month() as u8).resolve(year, today);
         }
         let from = self.from.map(|value| parse_date(year, value)).transpose()?;
         let to = self.to.map(|value| parse_date(year, value)).transpose()?;

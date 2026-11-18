@@ -82,6 +82,7 @@ impl PeriodArgs {
             from: self.from.as_deref(),
             to: self.to.as_deref(),
             shortcut,
+            default_to_current_month: true,
         }
     }
 }
