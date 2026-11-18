@@ -68,7 +68,8 @@ pub(crate) enum Commands {
         from_account: String,
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         to_account: String,
-        description: String,
+        #[arg(required = true, num_args = 1..)]
+        description: Vec<String>,
         /// Posting date in DD-MM; the year comes from the journal.
         #[arg(short, long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
         date: String,
