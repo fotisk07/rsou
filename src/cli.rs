@@ -27,11 +27,17 @@ pub(crate) enum Commands {
         period: PeriodArgs,
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
+        /// Number of account levels to display; 0 shows totals only.
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
     },
     Bs {
         /// Include all transactions through DD-MM in the journal year.
         #[arg(long, value_name = "DD-MM")]
         at: Option<String>,
+        /// Number of account levels to display; 0 shows totals only.
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
     },
     List,
     Add {

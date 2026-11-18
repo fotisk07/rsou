@@ -58,7 +58,7 @@ pub fn format_ledger(account: &str, report: &LedgerReport, year: i32) -> String 
     format!("{heading}\n\n{table}\n")
 }
 
-pub fn format_pnl(report: &PnlReport, year: i32) -> String {
+pub fn format_pnl(report: &PnlReport, year: i32, depth: usize) -> String {
     let mut builder = Builder::default();
     builder.push_record(["Account", "Amount"]);
     let expenses_start = report
@@ -72,16 +72,21 @@ pub fn format_pnl(report: &PnlReport, year: i32) -> String {
         if name == "Expenses" {
             builder.push_record(["", ""]);
         }
-        builder.push_record([name.to_uppercase(), String::new()]);
+        if depth > 0 {
+            builder.push_record([name.to_uppercase(), String::new()]);
+        }
         let mut total = Decimal::ZERO;
-        for row in rows {
+        for (index, row) in rows.iter().enumerate() {
             if row.depth == 0 {
                 total = row.amount;
-            } else {
-                builder.push_record([
-                    format!("{}{}", "  ".repeat(row.depth), row.account),
-                    format_report_amount(row.amount),
-                ]);
+            } else if row.depth <= depth {
+                add_account_row(&mut builder, &row.account, row.depth, row.amount);
+                let expanded = rows
+                    .get(index + 1)
+                    .is_some_and(|child| child.depth > row.depth && child.depth <= depth);
+                if expanded && !row.direct.is_zero() {
+                    add_account_row(&mut builder, "(direct)", row.depth + 1, row.direct);
+                }
             }
         }
         builder.push_record([format!("Total {name}"), format_report_amount(total)]);
@@ -102,6 +107,13 @@ pub fn format_pnl(report: &PnlReport, year: i32) -> String {
         "Profit and Loss | {}\n\n{table}\n",
         format_period(report.range, year)
     )
+}
+
+fn add_account_row(builder: &mut Builder, name: &str, depth: usize, amount: Decimal) {
+    builder.push_record([
+        format!("{}{name}", "  ".repeat(depth)),
+        format_report_amount(amount),
+    ]);
 }
 
 fn format_period(range: DateRange, year: i32) -> String {
@@ -136,7 +148,7 @@ fn format_report_amount(amount: Decimal) -> String {
     format!("{grouped}.{fraction}")
 }
 
-pub fn format_bs(report: &BsReport, year: i32) -> String {
+pub fn format_bs(report: &BsReport, year: i32, depth: usize) -> String {
     let mut builder = Builder::default();
     builder.push_record(["Account", "Amount"]);
     let mut rows = report.rows.iter().peekable();
@@ -146,13 +158,20 @@ pub fn format_bs(report: &BsReport, year: i32) -> String {
             builder.push_record(["", ""]);
             liabilities_and_equity += root.amount;
         }
-        builder.push_record([root.account.to_uppercase(), String::new()]);
+        if depth > 0 {
+            builder.push_record([root.account.to_uppercase(), String::new()]);
+        }
         while rows.peek().is_some_and(|row| row.depth > 0) {
             let row = rows.next().expect("peek found a detail row");
-            builder.push_record([
-                format!("{}{}", "  ".repeat(row.depth), row.account),
-                format_report_amount(row.amount),
-            ]);
+            if row.depth <= depth {
+                add_account_row(&mut builder, &row.account, row.depth, row.amount);
+                let expanded = rows
+                    .peek()
+                    .is_some_and(|child| child.depth > row.depth && child.depth <= depth);
+                if expanded && !row.direct.is_zero() {
+                    add_account_row(&mut builder, "(direct)", row.depth + 1, row.direct);
+                }
+            }
         }
         builder.push_record([
             format!("Total {}", root.account),

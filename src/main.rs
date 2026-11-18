@@ -65,16 +65,21 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             Ok(None)
         }
         Commands::Check => Ok(Some(format!("{} is valid\n", cli.journal_path))),
-        Commands::Pnl { period, shortcuts } => {
+        Commands::Pnl {
+            period,
+            shortcuts,
+            depth,
+        } => {
             let range = period
                 .request(shortcuts.selection())
                 .resolve(journal.metadata.year, Zoned::now().date())?;
             Ok(Some(output::format_pnl(
                 &queries::pnl(&journal, range),
                 journal.metadata.year,
+                depth,
             )))
         }
-        Commands::Bs { at } => {
+        Commands::Bs { at, depth } => {
             let range = DateRequest {
                 to: at.as_deref(),
                 ..DateRequest::default()
@@ -83,6 +88,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             Ok(Some(output::format_bs(
                 &queries::bs(&journal, range),
                 journal.metadata.year,
+                depth,
             )))
         }
         Commands::Ledger {

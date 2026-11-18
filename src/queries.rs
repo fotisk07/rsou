@@ -66,6 +66,7 @@ pub struct PnlRow {
     pub account: String,
     pub depth: usize,
     pub amount: Decimal,
+    pub direct: Decimal,
 }
 
 pub struct PnlReport {
@@ -98,6 +99,7 @@ pub fn pnl(journal: &Journal, range: DateRange) -> PnlReport {
         if root == "Income" {
             for row in &mut section {
                 row.amount = -row.amount;
+                row.direct = -row.direct;
             }
         }
         rows.extend(section);
@@ -132,6 +134,7 @@ fn pnl_account(
             account: account.name.clone(),
             depth,
             amount: total,
+            direct: balances.get(path).copied().unwrap_or(Decimal::ZERO),
         });
     }
     rows.extend(descendants);
@@ -142,6 +145,7 @@ pub struct BsRow {
     pub account: String,
     pub depth: usize,
     pub amount: Decimal,
+    pub direct: Decimal,
 }
 
 pub struct BsReport {
@@ -180,6 +184,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
         if root != "Assets" {
             for row in &mut section {
                 row.amount = -row.amount;
+                row.direct = -row.direct;
             }
         }
         rows.extend(section);
@@ -188,6 +193,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
                 account: "Net Result".to_string(),
                 depth: 1,
                 amount: net_result,
+                direct: net_result,
             });
         }
     }
@@ -217,6 +223,7 @@ fn bs_account(
             account: account.name.clone(),
             depth,
             amount: total,
+            direct: balances.get(path).copied().unwrap_or(Decimal::ZERO),
         });
     }
     rows.extend(descendants);
