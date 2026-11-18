@@ -45,6 +45,8 @@ pub(crate) enum Commands {
         account: String,
         #[command(flatten)]
         period: PeriodArgs,
+        #[command(flatten)]
+        shortcuts: PeriodShortcuts,
     },
     Post {
         amount: Decimal,

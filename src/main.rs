@@ -85,9 +85,13 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 journal.metadata.year,
             )))
         }
-        Commands::Ledger { account, period } => {
+        Commands::Ledger {
+            account,
+            period,
+            shortcuts,
+        } => {
             let range = period
-                .request(None)
+                .request(shortcuts.selection())
                 .resolve(journal.metadata.year, Zoned::now().date())?;
             let report = queries::ledger(&journal, &account, range)
                 .ok_or_else(|| format!("unknown account `{account}`"))?;
