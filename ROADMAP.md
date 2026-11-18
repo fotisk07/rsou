@@ -43,15 +43,17 @@ Start with a basic two-account transaction; broader split-posting options can fo
 - [x] Invalid input leaves the journal file unchanged.
 - [x] Writing normalizes the journal to a canonical format while preserving
       accounting data and sibling account order; root accounts use a fixed order.
-- [x] Transactions are written in chronological order, preserving their relative
-      order on the same date.
+- [x] Posting appends transactions in file order without reordering existing ones.
+- [x] An explicit `sort [-j PATH]` command orders transactions chronologically,
+      preserving their relative order on the same date.
 - [x] The new transaction appears with the correct amounts in the account ledger.
 - [x] CLI checks cover successful posting and rejection without file modification.
 
 ### Agreed design
 
 - Rewrite the whole journal in canonical format; manual edits remain supported.
-- Sort explicitly before writing, preserving same-date transaction order.
+- Posting preserves transaction order; only the explicit `sort` command reorders
+  transactions, preserving same-date transaction order.
 - Preserve required `name`, `year`, and `currency` metadata; year is informational.
 - Use fixed root-account order and preserve sibling account order.
 - Use two-space indentation, two spaces between posting account and amount,
