@@ -20,6 +20,15 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
+    /// Create a new journal without overwriting an existing file.
+    Init {
+        #[arg(long, default_value = "Personal journal")]
+        name: String,
+        #[arg(short = 'y', long, default_value_t = i32::from(Zoned::now().year()), value_parser = clap::value_parser!(i32).range(1..=9999))]
+        year: i32,
+        #[arg(long, default_value = "EUR")]
+        currency: String,
+    },
     Sort,
     Check,
     Pnl {

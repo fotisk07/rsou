@@ -1,4 +1,4 @@
-use crate::models::{Accounts, Journal, Transaction};
+use crate::models::{Accounts, Journal, JournalMetadata, Transaction};
 use rust_decimal::Decimal;
 
 #[derive(Debug, PartialEq)]
@@ -60,6 +60,32 @@ pub fn validate_transaction(
     }
     if balance != Decimal::ZERO {
         return Err(ValidationError::Unbalanced(transaction.description.clone()));
+    }
+    Ok(())
+}
+
+pub fn validate_metadata(metadata: &JournalMetadata) -> Result<(), String> {
+    if metadata.name.trim().is_empty()
+        || metadata
+            .name
+            .chars()
+            .any(|c| c.is_control() || matches!(c, '[' | ']'))
+    {
+        return Err(
+            "journal name must be nonempty and contain no control characters or brackets"
+                .to_string(),
+        );
+    }
+    if !(1..=9999).contains(&metadata.year) {
+        return Err("year must be between 1 and 9999".to_string());
+    }
+    if metadata.currency.len() != 3
+        || !metadata
+            .currency
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase())
+    {
+        return Err("currency must be three uppercase ASCII letters".to_string());
     }
     Ok(())
 }

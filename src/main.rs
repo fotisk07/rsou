@@ -9,9 +9,11 @@ mod validation;
 mod write;
 
 use crate::cli::{Cli, Commands};
-use crate::models::{Account, Journal, Posting, Transaction};
+use crate::models::{Account, Accounts, Journal, JournalMetadata, Posting, Transaction};
 use crate::parser::parse_journal;
-use crate::validation::{validate_account_path, validate_journal, validate_transaction};
+use crate::validation::{
+    validate_account_path, validate_journal, validate_metadata, validate_transaction,
+};
 use clap::{CommandFactory, Parser};
 use jiff::Zoned;
 use std::fs;
@@ -29,9 +31,38 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<Option<String>, String> {
+    // Initialization must work before a journal exists.
+    if let Commands::Init {
+        name,
+        year,
+        currency,
+    } = cli.command
+    {
+        let metadata = JournalMetadata {
+            name: name.trim().to_string(),
+            year,
+            currency,
+        };
+        validate_metadata(&metadata)?;
+        let journal = Journal {
+            metadata,
+            accounts: Accounts::new(),
+            transactions: Vec::new(),
+        };
+        write::create_journal(cli.journal_path.clone(), &journal).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                format!("{} already exists", cli.journal_path)
+            } else {
+                format!("failed creating {}: {error}", cli.journal_path)
+            }
+        })?;
+        return Ok(Some(format!("Created {}.\n", cli.journal_path)));
+    }
+
     let mut journal = load_journal(&cli.journal_path)?;
 
     match cli.command {
+        Commands::Init { .. } => unreachable!("initialization handled before loading"),
         Commands::Sort => {
             journal.sort_transactions();
             write::write_journal(cli.journal_path, &journal)

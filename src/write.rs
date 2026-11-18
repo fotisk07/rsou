@@ -57,8 +57,19 @@ fn format_journal(journal: &Journal) -> String {
     text
 }
 pub fn write_journal(path: String, journal: &Journal) -> io::Result<()> {
-    let journal_text = format_journal(&journal);
-    let path = Path::new(&path);
+    let file = journal_file(Path::new(&path), journal)?;
+    file.persist(path).map_err(|error| error.error)?;
+    Ok(())
+}
+
+pub fn create_journal(path: String, journal: &Journal) -> io::Result<()> {
+    let file = journal_file(Path::new(&path), journal)?;
+    file.persist_noclobber(path).map_err(|error| error.error)?;
+    Ok(())
+}
+
+fn journal_file(path: &Path, journal: &Journal) -> io::Result<NamedTempFile> {
+    let journal_text = format_journal(journal);
     let directory = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -67,9 +78,7 @@ pub fn write_journal(path: String, journal: &Journal) -> io::Result<()> {
     let mut file = NamedTempFile::new_in(directory)?;
     file.write_all(journal_text.as_bytes())?;
     file.as_file().sync_all()?;
-    file.persist(path).map_err(|error| error.error)?;
-
-    Ok(())
+    Ok(file)
 }
 
 #[cfg(test)]
