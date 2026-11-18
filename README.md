@@ -1,7 +1,8 @@
 # Sou (Rust)
 
 A personal accounting CLI, rewritten in Rust from the Python version of Sou.
-The repository and Cargo package are named `rsou`; the executable is `sou`.
+The repository, Cargo package, and executable are all named `sou`.
+The original Python project lives in [sou-python](https://github.com/fotisk07/sou-python).
 
 ## Install
 
