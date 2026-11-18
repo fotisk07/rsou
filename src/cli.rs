@@ -22,6 +22,7 @@ pub(crate) struct Cli {
 #[derive(Subcommand)]
 pub(crate) enum Commands {
     /// Create a journal; never overwrite.
+    #[command(display_order = 6)]
     Init {
         /// Journal name.
         #[arg(long, default_value = "Personal journal")]
@@ -34,11 +35,16 @@ pub(crate) enum Commands {
         currency: String,
     },
     /// Sort transactions by date.
+    #[command(display_order = 9)]
     Sort,
     /// Check journal validity.
+    #[command(display_order = 5)]
     Check,
     /// Show profit and loss.
-    #[command(after_help = "Default: current month; other journal years: all dates.")]
+    #[command(
+        display_order = 3,
+        after_help = "Default: current month; other journal years: all dates."
+    )]
     Pnl {
         #[command(flatten)]
         period: PeriodArgs,
@@ -49,7 +55,10 @@ pub(crate) enum Commands {
         depth: usize,
     },
     /// Show the balance sheet.
-    #[command(after_help = "Default: current month-end; other journal years: all dates.")]
+    #[command(
+        display_order = 4,
+        after_help = "Default: current month-end; other journal years: all dates."
+    )]
     Bs {
         #[command(flatten)]
         date: AsOfArgs,
@@ -58,8 +67,10 @@ pub(crate) enum Commands {
         depth: usize,
     },
     /// List the account tree.
+    #[command(display_order = 1)]
     List,
     /// Add an account under an existing parent.
+    #[command(display_order = 7)]
     Add {
         /// a=assets, l=liabilities, eq=equity, i=income, e=expenses.
         #[arg(value_enum)]
@@ -68,7 +79,10 @@ pub(crate) enum Commands {
         account: String,
     },
     /// Show account transactions and balances.
-    #[command(after_help = "Default: current month; other journal years: all dates.")]
+    #[command(
+        display_order = 2,
+        after_help = "Default: current month; other journal years: all dates."
+    )]
     Ledger {
         /// Account path, e.g. Assets/Bank.
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
@@ -79,6 +93,7 @@ pub(crate) enum Commands {
         shortcuts: PeriodShortcuts,
     },
     /// Record a transaction.
+    #[command(display_order = 8)]
     Post {
         /// Amount to transfer; negatives reverse direction.
         #[arg(allow_negative_numbers = true)]
