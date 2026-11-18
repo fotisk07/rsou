@@ -115,12 +115,26 @@ pub struct JournalMetadata {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct AccountAlias {
+    pub name: String,
+    pub account: String,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Journal {
     pub metadata: JournalMetadata,
     pub accounts: Accounts,
+    pub aliases: Vec<AccountAlias>,
     pub transactions: Vec<Transaction>,
 }
 impl Journal {
+    pub fn resolve_account<'a>(&'a self, reference: &'a str) -> &'a str {
+        self.aliases
+            .iter()
+            .find(|alias| alias.name == reference)
+            .map_or(reference, |alias| alias.account.as_str())
+    }
+
     pub fn sort_transactions(&mut self) {
         self.transactions
             .sort_by_key(|transaction| transaction.date);

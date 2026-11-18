@@ -6,6 +6,9 @@ use rust_decimal::Decimal;
 pub enum ValidationError {
     UnknownAccount(String),
     InvalidAccountName(String),
+    InvalidAlias(String),
+    DuplicateAlias(String),
+    AliasConflict(String),
     Unbalanced(String),
     NotEnoughPostings,
     InvalidDescription,
@@ -20,6 +23,9 @@ impl std::fmt::Display for ValidationError {
                 write!(f, "transaction date {date} is outside journal year {year}")
             }
             Self::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
+            Self::InvalidAlias(name) => write!(f, "invalid alias `{name}`"),
+            Self::DuplicateAlias(name) => write!(f, "duplicate alias `{name}`"),
+            Self::AliasConflict(name) => write!(f, "alias `{name}` conflicts with an account name"),
             Self::InvalidAccountName(name) => write!(
                 f,
                 "invalid account name `{name}`: names must be nonempty and contain no whitespace, slashes, colons, or brackets"
@@ -129,6 +135,27 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
     while let Some(account) = accounts.pop() {
         validate_account_name(&account.name)?;
         accounts.extend(&account.children);
+    }
+
+    for (index, alias) in journal.aliases.iter().enumerate() {
+        if validate_account_name(&alias.name).is_err()
+            || alias.name.starts_with('-')
+            || alias.name.contains('=')
+        {
+            return Err(ValidationError::InvalidAlias(alias.name.clone()));
+        }
+        if journal.accounts.find_account(&alias.name).is_some() {
+            return Err(ValidationError::AliasConflict(alias.name.clone()));
+        }
+        if journal.aliases[..index]
+            .iter()
+            .any(|other| other.name == alias.name)
+        {
+            return Err(ValidationError::DuplicateAlias(alias.name.clone()));
+        }
+        if journal.accounts.find_account(&alias.account).is_none() {
+            return Err(ValidationError::UnknownAccount(alias.account.clone()));
+        }
     }
 
     for transaction in &journal.transactions {

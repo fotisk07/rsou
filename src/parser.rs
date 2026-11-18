@@ -1,4 +1,6 @@
-use crate::models::{Account, Accounts, Journal, JournalMetadata, Posting, Transaction};
+use crate::models::{
+    Account, AccountAlias, Accounts, Journal, JournalMetadata, Posting, Transaction,
+};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -32,7 +34,7 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
     let (before_journal, metadata_text) = before_accounts
         .split_once("[JOURNAL]")
         .ok_or_else(|| ParseError::new("missing [JOURNAL] section"))?;
-    let (accounts_text, transactions_text) = sections_text
+    let (before_transactions, transactions_text) = sections_text
         .split_once("[TRANSACTIONS]")
         .ok_or_else(|| ParseError::new("missing [TRANSACTIONS] section"))?;
 
@@ -42,15 +44,30 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
         .filter(|&byte| byte == b'\n')
         .count()
         + 1;
-    let transactions_line =
-        accounts_line + accounts_text.bytes().filter(|&byte| byte == b'\n').count();
+    let transactions_line = accounts_line
+        + before_transactions
+            .bytes()
+            .filter(|&byte| byte == b'\n')
+            .count();
+    let (accounts_text, aliases_text) = before_transactions
+        .split_once("[ALIASES]")
+        .map_or((before_transactions, None), |(accounts, aliases)| {
+            (accounts, Some(aliases))
+        });
     let accounts = parse_accounts(accounts_text, accounts_line)?;
+    let aliases = if let Some(text) = aliases_text {
+        let line = accounts_line + accounts_text.bytes().filter(|&byte| byte == b'\n').count();
+        parse_aliases(text, line)?
+    } else {
+        Vec::new()
+    };
     let transactions = parse_transactions(transactions_text, transactions_line)?;
     let metadata = parse_metadata(metadata_text, metadata_line)?;
 
     Ok(Journal {
         metadata,
         accounts,
+        aliases,
         transactions,
     })
 }
@@ -104,6 +121,25 @@ fn parse_accounts(accounts_text: &str, section_line: usize) -> Result<Accounts, 
         });
     }
     Ok(accounts)
+}
+
+fn parse_aliases(text: &str, section_line: usize) -> Result<Vec<AccountAlias>, ParseError> {
+    let mut aliases: Vec<AccountAlias> = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let line_number = section_line + index;
+        let (name, account) = line
+            .split_once('=')
+            .ok_or_else(|| ParseError::at(line_number, "expected ALIAS = ACCOUNT"))?;
+        let (name, account) = (name.trim(), account.trim());
+        aliases.push(AccountAlias {
+            name: name.to_string(),
+            account: account.to_string(),
+        });
+    }
+    Ok(aliases)
 }
 
 fn parse_transactions(

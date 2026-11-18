@@ -48,6 +48,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
         let journal = Journal {
             metadata,
             accounts: Accounts::new(),
+            aliases: Vec::new(),
             transactions: Vec::new(),
         };
         write::create_journal(cli.journal_path.clone(), &journal).map_err(|error| {
@@ -142,11 +143,11 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             let date = dates::parse_date(journal.metadata.year, &date)?;
             let postings = vec![
                 Posting {
-                    account: from_account,
+                    account: journal.resolve_account(&from_account).to_string(),
                     amount: -amount,
                 },
                 Posting {
-                    account: to_account,
+                    account: journal.resolve_account(&to_account).to_string(),
                     amount,
                 },
             ];

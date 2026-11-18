@@ -96,11 +96,11 @@ pub(crate) enum Commands {
         /// Amount to transfer; negatives reverse direction.
         #[arg(allow_negative_numbers = true)]
         amount: Decimal,
-        /// Source account.
-        #[arg(add = ArgValueCompleter::new(completion::accounts))]
+        /// Source account path or alias.
+        #[arg(add = ArgValueCompleter::new(completion::posting_accounts))]
         from_account: String,
-        /// Destination account.
-        #[arg(add = ArgValueCompleter::new(completion::accounts))]
+        /// Destination account path or alias.
+        #[arg(add = ArgValueCompleter::new(completion::posting_accounts))]
         to_account: String,
         /// Description; quotes optional.
         #[arg(required = true, num_args = 1..)]

@@ -45,6 +45,13 @@ fn format_journal(journal: &Journal) -> String {
     text.push_str("[ACCOUNTS]\n\n");
     text.push_str(&format_accounts(&journal.accounts));
 
+    if !journal.aliases.is_empty() {
+        text.push_str("\n[ALIASES]\n\n");
+        for alias in &journal.aliases {
+            text.push_str(&format!("{} = {}\n", alias.name, alias.account));
+        }
+    }
+
     // Transactions
     text.push('\n');
     text.push_str("[TRANSACTIONS]\n\n");

@@ -3,14 +3,22 @@ use clap_complete::CompletionCandidate;
 use std::ffi::{OsStr, OsString};
 
 pub fn accounts(current: &OsStr) -> Vec<CompletionCandidate> {
-    complete_accounts(current, false)
+    complete_accounts(current, false, false)
+}
+
+pub fn posting_accounts(current: &OsStr) -> Vec<CompletionCandidate> {
+    complete_accounts(current, false, true)
 }
 
 pub fn account_parents(current: &OsStr) -> Vec<CompletionCandidate> {
-    complete_accounts(current, true)
+    complete_accounts(current, true, false)
 }
 
-fn complete_accounts(current: &OsStr, adding: bool) -> Vec<CompletionCandidate> {
+fn complete_accounts(
+    current: &OsStr,
+    adding: bool,
+    include_aliases: bool,
+) -> Vec<CompletionCandidate> {
     let Some(prefix) = current.to_str() else {
         return Vec::new();
     };
@@ -24,11 +32,16 @@ fn complete_accounts(current: &OsStr, adding: bool) -> Vec<CompletionCandidate> 
 
     let (base, partial) = split_path(prefix);
     if base.is_empty() {
-        return ["Assets", "Liabilities", "Equity", "Income", "Expenses"]
+        let roots = ["Assets", "Liabilities", "Equity", "Income", "Expenses"]
             .into_iter()
             .filter_map(|root| journal.accounts.find_account(root))
-            .filter_map(|account| complete_component(account, base, partial, adding))
-            .collect();
+            .filter_map(|account| complete_component(account, base, partial, adding));
+        let aliases = journal
+            .aliases
+            .iter()
+            .filter(|alias| include_aliases && alias.name.starts_with(partial))
+            .map(|alias| CompletionCandidate::new(&alias.name));
+        return roots.chain(aliases).collect();
     }
     let Some(parent) = journal.accounts.find_account(base.trim_end_matches('/')) else {
         return Vec::new();
