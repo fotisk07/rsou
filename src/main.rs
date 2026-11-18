@@ -7,7 +7,7 @@ mod queries;
 mod validation;
 mod write;
 
-use crate::dates::DateRange;
+use crate::dates::{DateRange, PeriodShortcut};
 use crate::models::{Account, Journal, Posting, Transaction};
 use crate::parser::parse_journal;
 use crate::validation::{validate_account_path, validate_journal, validate_transaction};
@@ -36,6 +36,8 @@ enum Commands {
     Pnl {
         #[command(flatten)]
         period: PeriodArgs,
+        #[command(flatten)]
+        shortcuts: PnlShortcuts,
     },
     Bs {
         /// Include all transactions through DD-MM in the journal year.
@@ -74,6 +76,50 @@ struct PeriodArgs {
     /// Include transactions through DD-MM in the journal year (inclusive).
     #[arg(long, value_name = "DD-MM")]
     to: Option<String>,
+}
+
+#[derive(Args)]
+#[group(multiple = false, conflicts_with_all = ["from", "to"])]
+struct PnlShortcuts {
+    /// Report a complete month of the journal year (1-12).
+    #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
+    month: Option<u8>,
+    /// Report a complete quarter of the journal year (1-4).
+    #[arg(short = 'q', long, value_parser = clap::value_parser!(u8).range(1..=4))]
+    quarter: Option<u8>,
+    /// Report from the start of the current month through today.
+    #[arg(long)]
+    mtd: bool,
+    /// Report from the start of the current quarter through today.
+    #[arg(long)]
+    qtd: bool,
+    /// Report from the start of the current year through today.
+    #[arg(long)]
+    ytd: bool,
+    /// Report the previous complete month within the current year.
+    #[arg(long)]
+    last_month: bool,
+}
+
+impl PnlShortcuts {
+    fn selection(&self) -> Option<PeriodShortcut> {
+        match self {
+            Self {
+                month: Some(month), ..
+            } => Some(PeriodShortcut::Month(*month)),
+            Self {
+                quarter: Some(quarter),
+                ..
+            } => Some(PeriodShortcut::Quarter(*quarter)),
+            Self { mtd: true, .. } => Some(PeriodShortcut::MonthToDate),
+            Self { qtd: true, .. } => Some(PeriodShortcut::QuarterToDate),
+            Self { ytd: true, .. } => Some(PeriodShortcut::YearToDate),
+            Self {
+                last_month: true, ..
+            } => Some(PeriodShortcut::LastMonth),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, ValueEnum)]
@@ -150,12 +196,15 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             Ok(None)
         }
         Commands::Check => Ok(Some(format!("{} is valid\n", cli.journal_path))),
-        Commands::Pnl { period } => {
-            let range = DateRange::resolve(
-                journal.metadata.year,
-                period.from.as_deref(),
-                period.to.as_deref(),
-            )?;
+        Commands::Pnl { period, shortcuts } => {
+            let range = match shortcuts.selection() {
+                Some(shortcut) => shortcut.resolve(journal.metadata.year, Zoned::now().date())?,
+                None => DateRange::resolve(
+                    journal.metadata.year,
+                    period.from.as_deref(),
+                    period.to.as_deref(),
+                )?,
+            };
             Ok(Some(output::format_pnl(
                 &queries::pnl(&journal, range),
                 journal.metadata.year,
