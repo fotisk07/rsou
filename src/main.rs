@@ -16,6 +16,7 @@ use crate::validation::{
 };
 use clap::{CommandFactory, Parser};
 use jiff::Zoned;
+use rust_decimal::Decimal;
 use std::fs;
 
 fn main() {
@@ -155,15 +156,46 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             ];
 
             let transaction = Transaction::new(date, description.join(" "), postings);
-            validate_transaction(&journal, &transaction)
-                .map_err(|error| format!("invalid transaction: {error}"))?;
-
-            journal.transactions.push(transaction);
-            write::write_journal(cli.journal_path, &journal)
-                .map_err(|error| format!("failed saving: {error}"))?;
-            Ok(None)
+            save_transaction(cli.journal_path, journal, transaction)
+        }
+        Commands::Split {
+            description,
+            postings,
+            date,
+        } => {
+            let date = dates::parse_date(journal.metadata.year, &date)?;
+            let postings = parse_split_postings(postings)?;
+            let transaction = Transaction::new(date, description, postings);
+            save_transaction(cli.journal_path, journal, transaction)
         }
     }
+}
+
+fn parse_split_postings(values: Vec<String>) -> Result<Vec<Posting>, String> {
+    if !values.len().is_multiple_of(2) {
+        return Err("each account must be followed by an amount".to_string());
+    }
+    let mut values = values.into_iter();
+    std::iter::from_fn(|| Some((values.next()?, values.next()?)))
+        .map(|(account, amount)| {
+            let amount = amount
+                .parse::<Decimal>()
+                .map_err(|_| format!("invalid amount `{amount}` for account `{account}`"))?;
+            Ok(Posting { account, amount })
+        })
+        .collect()
+}
+
+fn save_transaction(
+    path: String,
+    mut journal: Journal,
+    transaction: Transaction,
+) -> Result<Option<String>, String> {
+    validate_transaction(&journal, &transaction)
+        .map_err(|error| format!("invalid transaction: {error}"))?;
+    journal.transactions.push(transaction);
+    write::write_journal(path, &journal).map_err(|error| format!("failed saving: {error}"))?;
+    Ok(None)
 }
 
 fn load_journal(path: &str) -> Result<Journal, String> {

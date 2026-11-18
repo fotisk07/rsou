@@ -35,7 +35,7 @@ pub(crate) enum Commands {
         currency: String,
     },
     /// Sort transactions by date.
-    #[command(display_order = 9)]
+    #[command(display_order = 10)]
     Sort,
     /// Check journal validity.
     #[command(display_order = 5)]
@@ -76,6 +76,7 @@ pub(crate) enum Commands {
         #[arg(value_enum)]
         account_type: AccountType,
         /// Path within the type, e.g. Bank/Checking.
+        #[arg(add = ArgValueCompleter::new(completion::account_parents))]
         account: String,
     },
     /// Show account transactions and balances.
@@ -107,6 +108,21 @@ pub(crate) enum Commands {
         /// Description; quotes optional.
         #[arg(required = true, num_args = 1..)]
         description: Vec<String>,
+        /// Posting date in the journal year.
+        #[arg(short, long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
+        date: String,
+    },
+    /// Record one transaction with multiple postings.
+    #[command(
+        display_order = 9,
+        after_help = "Example: sou split \"Grocery run\" Assets/Bank -50 Expenses/Food 40 Expenses/Household 10"
+    )]
+    Split {
+        /// Description; quote if it contains spaces.
+        description: String,
+        /// Alternating account paths and signed amounts, which must sum to zero.
+        #[arg(required = true, num_args = 1.., value_name = "ACCOUNT_AMOUNT", allow_negative_numbers = true)]
+        postings: Vec<String>,
         /// Posting date in the journal year.
         #[arg(short, long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
         date: String,
