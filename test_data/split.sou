@@ -21,14 +21,14 @@ Expenses
 [TRANSACTIONS]
 
 2026-02-01 Opening balance
-  Equity::OpeningBalances  -200.00
-  Assets::Cash::Checking  200.00
+  Equity/OpeningBalances  -200.00
+  Assets/Cash/Checking  200.00
 
 2026-02-03 Groceries and snacks
-  Assets::Cash::Checking  -23.75
-  Expenses::Food::Groceries  20.00
-  Expenses::Food::Snacks  3.75
+  Assets/Cash/Checking  -23.75
+  Expenses/Food/Groceries  20.00
+  Expenses/Food/Snacks  3.75
 
 2026-02-04 Small refund
-  Expenses::Food::Groceries  -5.00
-  Assets::Cash::Checking  5.00
+  Expenses/Food/Groceries  -5.00
+  Assets/Cash/Checking  5.00

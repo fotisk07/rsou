@@ -15,7 +15,7 @@ pub struct LedgerEntry {
 pub fn ledger_entries(journal: &Journal, path: &str) -> Option<Vec<LedgerEntry>> {
     journal.accounts.find_account(path)?;
 
-    let child_prefix = format!("{path}::");
+    let child_prefix = format!("{path}/");
     let mut transactions: Vec<&Transaction> = journal.transactions.iter().collect();
 
     transactions.sort_by_key(|transaction| transaction.date);
@@ -94,7 +94,7 @@ fn pnl_account(
     let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
     let mut descendants = Vec::new();
     for child in &account.children {
-        let child_path = format!("{path}::{}", child.name);
+        let child_path = format!("{path}/{}", child.name);
         let (child_total, child_rows) = pnl_account(child, &child_path, depth + 1, balances);
         total += child_total;
         descendants.extend(child_rows);
@@ -173,7 +173,7 @@ fn bs_account(
     let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
     let mut descendants = Vec::new();
     for child in &account.children {
-        let child_path = format!("{path}::{}", child.name);
+        let child_path = format!("{path}/{}", child.name);
         let (child_total, child_rows) = bs_account(child, &child_path, depth + 1, balances);
         total += child_total;
         descendants.extend(child_rows);
@@ -202,20 +202,20 @@ mod tests {
     fn ledger_includes_descendants_and_running_balances() {
         let journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
 
-        let cash = ledger_entries(&journal, "Assets::Cash").unwrap();
+        let cash = ledger_entries(&journal, "Assets/Cash").unwrap();
         assert_eq!(cash.len(), 3);
-        assert_eq!(cash[0].account, "Assets::Cash::Checking");
+        assert_eq!(cash[0].account, "Assets/Cash/Checking");
         assert_eq!(cash[0].balance, Decimal::from(200));
         assert_eq!(cash[1].amount, Decimal::from_str_exact("-23.75").unwrap());
         assert_eq!(cash[1].balance, Decimal::from_str_exact("176.25").unwrap());
         assert_eq!(cash[2].balance, Decimal::from_str_exact("181.25").unwrap());
 
-        let groceries = ledger_entries(&journal, "Expenses::Food::Groceries").unwrap();
+        let groceries = ledger_entries(&journal, "Expenses/Food/Groceries").unwrap();
         assert_eq!(groceries.len(), 2);
         assert_eq!(groceries[0].description, "Groceries and snacks");
         assert_eq!(groceries[1].description, "Small refund");
 
-        assert!(ledger_entries(&journal, "Expenses::Missing").is_none());
+        assert!(ledger_entries(&journal, "Expenses/Missing").is_none());
         assert!(ledger_entries(&journal, "Income").unwrap().is_empty());
     }
 
@@ -224,7 +224,7 @@ mod tests {
         let mut journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
         journal.transactions.reverse();
 
-        let entries = ledger_entries(&journal, "Assets::Cash").unwrap();
+        let entries = ledger_entries(&journal, "Assets/Cash").unwrap();
         assert_eq!(entries[0].description, "Opening balance");
         assert_eq!(entries[1].description, "Groceries and snacks");
         assert_eq!(entries[2].description, "Small refund");
@@ -240,11 +240,11 @@ mod tests {
         let mut text =
             include_str!("../test_data/split.sou").replace("    Snacks", "    Snacks\n  Foodie");
         text.push_str(
-            "\n2026-02-05 Foodie expense\n  Assets::Cash::Checking  -2.00\n  Expenses::Foodie  2.00\n",
+            "\n2026-02-05 Foodie expense\n  Assets/Cash/Checking  -2.00\n  Expenses/Foodie  2.00\n",
         );
         let journal = parse_journal(&text).unwrap();
 
-        let food = ledger_entries(&journal, "Expenses::Food").unwrap();
+        let food = ledger_entries(&journal, "Expenses/Food").unwrap();
         assert_eq!(food.len(), 3); // Groceries, snacks, and the refund.
         assert_eq!(food[2].balance, Decimal::from_str_exact("18.75").unwrap());
         assert!(

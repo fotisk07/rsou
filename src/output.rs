@@ -148,12 +148,12 @@ mod tests {
     #[test]
     fn formats_cash_ledger() {
         let journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
-        let entries = ledger_entries(&journal, "Assets::Cash").unwrap();
-        let text = format_ledger("Assets::Cash", &entries);
+        let entries = ledger_entries(&journal, "Assets/Cash").unwrap();
+        let text = format_ledger("Assets/Cash", &entries);
 
-        assert!(text.starts_with("Ledger — Assets::Cash\n"));
+        assert!(text.starts_with("Ledger — Assets/Cash\n"));
         assert!(text.contains("2026-02-03"));
-        assert!(text.contains("Assets::Cash::Checking"));
+        assert!(text.contains("Assets/Cash/Checking"));
         assert!(text.contains("Groceries and snacks"));
         assert!(text.contains("-23.75"));
         assert!(text.contains("176.25"));

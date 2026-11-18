@@ -47,7 +47,7 @@ impl Accounts {
     }
 
     pub fn find_account_mut(&mut self, path: &str) -> Option<&mut Account> {
-        let mut parts = path.split("::");
+        let mut parts = path.split('/');
         let mut current = self.root_mut(parts.next()?)?;
         for part in parts {
             current = current
@@ -59,7 +59,7 @@ impl Accounts {
     }
 
     pub fn find_account(&self, name: &str) -> Option<&Account> {
-        let mut parts = name.split("::");
+        let mut parts = name.split('/');
 
         let account_type = parts.next()?;
 
@@ -140,7 +140,7 @@ mod tests {
             children: vec![],
         });
 
-        let account = accounts.find_account("Assets::test").unwrap();
+        let account = accounts.find_account("Assets/test").unwrap();
         assert_eq!(account.name, "test");
     }
 

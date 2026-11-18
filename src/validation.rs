@@ -17,7 +17,7 @@ impl std::fmt::Display for ValidationError {
             Self::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
             Self::InvalidAccountName(name) => write!(
                 f,
-                "invalid account name `{name}`: names must be nonempty and contain no whitespace, colons, or brackets"
+                "invalid account name `{name}`: names must be nonempty and contain no whitespace, slashes, colons, or brackets"
             ),
             Self::Unbalanced(description) => {
                 write!(f, "unbalanced transaction `{description}`")
@@ -65,14 +65,14 @@ pub fn validate_transaction(
 }
 
 pub fn validate_account_path(path: &str) -> Result<(), ValidationError> {
-    path.split("::").try_for_each(validate_account_name)
+    path.split('/').try_for_each(validate_account_name)
 }
 
 fn validate_account_name(name: &str) -> Result<(), ValidationError> {
     if name.is_empty()
         || name
             .chars()
-            .any(|c| c.is_whitespace() || c.is_control() || matches!(c, ':' | '[' | ']'))
+            .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '/' | ':' | '[' | ']'))
     {
         return Err(ValidationError::InvalidAccountName(name.to_string()));
     }
@@ -114,12 +114,12 @@ mod tests {
     #[test]
     fn parsed_journal_with_unknown_account() {
         let text = include_str!("../test_data/simple.sou")
-            .replace("Expenses::Food  12.50", "Expenses::Missing  12.50");
+            .replace("Expenses/Food  12.50", "Expenses/Missing  12.50");
         let journal = parse_journal(&text).expect("Stuff");
         assert_eq!(
             validate_journal(&journal),
             Err(ValidationError::UnknownAccount(
-                "Expenses::Missing".to_string()
+                "Expenses/Missing".to_string()
             ))
         );
     }
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn parsed_journal_with_unbalanced_transaction() {
         let text = include_str!("../test_data/simple.sou")
-            .replace("Expenses::Food  12.50", "Expenses::Food  10.00");
+            .replace("Expenses/Food  12.50", "Expenses/Food  10.00");
         let journal = parse_journal(&text).expect("Stuff");
         assert_eq!(
             validate_journal(&journal),
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn parsed_journal_with_insufficient_transactions() {
-        let text = include_str!("../test_data/simple.sou").replace("Expenses::Food  12.50", "");
+        let text = include_str!("../test_data/simple.sou").replace("Expenses/Food  12.50", "");
         let journal = parse_journal(&text).unwrap();
         assert_eq!(
             validate_journal(&journal),

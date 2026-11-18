@@ -19,9 +19,9 @@ Expenses
 [TRANSACTIONS]
 
 2026-01-01 Opening balance
-  Equity::OpeningBalances  -100.00
-  Assets::Cash::Checking  100.00
+  Equity/OpeningBalances  -100.00
+  Assets/Cash/Checking  100.00
 
 2026-01-02 Coffee and lunch
-  Assets::Cash::Checking  -12.50
-  Expenses::Food  12.50
+  Assets/Cash/Checking  -12.50
+  Expenses/Food  12.50

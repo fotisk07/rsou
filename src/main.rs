@@ -1,3 +1,4 @@
+mod completion;
 mod models;
 mod output;
 mod parser;
@@ -8,7 +9,8 @@ mod write;
 use crate::models::{Account, Journal, Posting, Transaction};
 use crate::parser::parse_journal;
 use crate::validation::{validate_account_path, validate_journal, validate_transaction};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::ArgValueCompleter;
 use jiff::Zoned;
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -35,15 +37,18 @@ enum Commands {
     Add {
         #[arg(value_enum)]
         account_type: AccountType,
-        /// Account path relative to the root, e.g. Bank::Checking.
+        /// Account path relative to the root, e.g. Bank/Checking.
         account: String,
     },
     Ledger {
+        #[arg(add = ArgValueCompleter::new(completion::accounts))]
         account: String,
     },
     Post {
         amount: Decimal,
+        #[arg(add = ArgValueCompleter::new(completion::accounts))]
         from_account: String,
+        #[arg(add = ArgValueCompleter::new(completion::accounts))]
         to_account: String,
         description: String,
         #[arg(short, long, default_value_t = Zoned::now().date())]
@@ -77,6 +82,7 @@ impl AccountType {
 }
 
 fn main() {
+    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
     match run(Cli::parse()) {
         Ok(Some(text)) => print!("{text}"),
         Ok(None) => {}
@@ -102,10 +108,10 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             account_type,
             account,
         } => {
-            let path = format!("{}::{}", account_type.root_name(), account);
+            let path = format!("{}/{}", account_type.root_name(), account);
             validate_account_path(&path).map_err(|error| format!("invalid account: {error}"))?;
             let (parent_path, name) = path
-                .rsplit_once("::")
+                .rsplit_once('/')
                 .expect("root prefix includes separator");
             let parent = journal
                 .accounts

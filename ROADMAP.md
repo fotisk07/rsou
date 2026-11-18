@@ -20,7 +20,7 @@ Update this document and commit it alongside the relevant code changes.
 
 ## Completed
 
-- [x] Journal data types and account-tree lookup using `::` paths.
+- [x] Journal data types and account-tree lookup using `/` paths.
 - [x] Journal parsing with messages and line numbers for parse errors.
 - [x] Separate accounting validation: known accounts, balanced transactions,
       and at least two postings.
