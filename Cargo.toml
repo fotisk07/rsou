@@ -3,6 +3,10 @@ name = "rsou"
 version = "0.2.0"
 edition = "2024"
 
+[[bin]]
+name = "sou"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
 clap_complete = { version = "4.6", features = ["unstable-dynamic"] }

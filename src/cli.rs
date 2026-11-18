@@ -8,7 +8,7 @@ use jiff::Zoned;
 use rust_decimal::Decimal;
 
 #[derive(Parser)]
-#[command(name = "rsou")]
+#[command(name = "sou")]
 #[command(about = "Personal accounting CLI", version)]
 pub(crate) struct Cli {
     /// Journal file.
