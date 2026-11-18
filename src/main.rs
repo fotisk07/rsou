@@ -1,4 +1,5 @@
 mod completion;
+mod dates;
 mod models;
 mod output;
 mod parser;
@@ -6,10 +7,11 @@ mod queries;
 mod validation;
 mod write;
 
+use crate::dates::DateRange;
 use crate::models::{Account, Journal, Posting, Transaction};
 use crate::parser::parse_journal;
 use crate::validation::{validate_account_path, validate_journal, validate_transaction};
-use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::ArgValueCompleter;
 use jiff::Zoned;
 use jiff::civil::Date;
@@ -31,8 +33,15 @@ struct Cli {
 enum Commands {
     Sort,
     Check,
-    Pnl,
-    Bs,
+    Pnl {
+        #[command(flatten)]
+        period: PeriodArgs,
+    },
+    Bs {
+        /// Include all transactions through DD-MM in the journal year.
+        #[arg(long, value_name = "DD-MM")]
+        at: Option<String>,
+    },
     List,
     Add {
         #[arg(value_enum)]
@@ -43,6 +52,8 @@ enum Commands {
     Ledger {
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         account: String,
+        #[command(flatten)]
+        period: PeriodArgs,
     },
     Post {
         amount: Decimal,
@@ -55,6 +66,16 @@ enum Commands {
         date: Date,
     },
 }
+#[derive(Args)]
+struct PeriodArgs {
+    /// Include transactions from DD-MM in the journal year (inclusive).
+    #[arg(long, value_name = "DD-MM")]
+    from: Option<String>,
+    /// Include transactions through DD-MM in the journal year (inclusive).
+    #[arg(long, value_name = "DD-MM")]
+    to: Option<String>,
+}
+
 #[derive(Clone, ValueEnum)]
 enum AccountType {
     #[value(name = "a")]
@@ -129,12 +150,37 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             Ok(None)
         }
         Commands::Check => Ok(Some(format!("{} is valid\n", cli.journal_path))),
-        Commands::Pnl => Ok(Some(output::format_pnl(&queries::pnl(&journal)))),
-        Commands::Bs => Ok(Some(output::format_bs(&queries::bs(&journal)))),
-        Commands::Ledger { account } => {
-            let entries = queries::ledger_entries(&journal, &account)
+        Commands::Pnl { period } => {
+            let range = DateRange::resolve(
+                journal.metadata.year,
+                period.from.as_deref(),
+                period.to.as_deref(),
+            )?;
+            Ok(Some(output::format_pnl(
+                &queries::pnl(&journal, range),
+                journal.metadata.year,
+            )))
+        }
+        Commands::Bs { at } => {
+            let range = DateRange::resolve(journal.metadata.year, None, at.as_deref())?;
+            Ok(Some(output::format_bs(
+                &queries::bs(&journal, range),
+                journal.metadata.year,
+            )))
+        }
+        Commands::Ledger { account, period } => {
+            let range = DateRange::resolve(
+                journal.metadata.year,
+                period.from.as_deref(),
+                period.to.as_deref(),
+            )?;
+            let report = queries::ledger(&journal, &account, range)
                 .ok_or_else(|| format!("unknown account `{account}`"))?;
-            Ok(Some(output::format_ledger(&account, &entries)))
+            Ok(Some(output::format_ledger(
+                &account,
+                &report,
+                journal.metadata.year,
+            )))
         }
         Commands::Post {
             amount,

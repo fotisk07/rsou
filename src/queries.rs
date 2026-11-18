@@ -1,3 +1,4 @@
+use crate::dates::DateRange;
 use crate::models::{Account, Journal, Transaction};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -10,22 +11,37 @@ pub struct LedgerEntry {
     pub amount: Decimal,
     pub balance: Decimal,
 }
-/// Return chronological entries for this account and its descendants.
+pub struct LedgerReport {
+    pub range: DateRange,
+    pub opening: Decimal,
+    pub entries: Vec<LedgerEntry>,
+}
+
+/// Return chronological entries and the pre-period balance for an account and its descendants.
 /// Each matching posting produces one entry. None means the account is unknown.
-pub fn ledger_entries(journal: &Journal, path: &str) -> Option<Vec<LedgerEntry>> {
+pub fn ledger(journal: &Journal, path: &str, range: DateRange) -> Option<LedgerReport> {
     journal.accounts.find_account(path)?;
 
     let child_prefix = format!("{path}/");
-    let mut transactions: Vec<&Transaction> = journal.transactions.iter().collect();
+    let matches_account = |account: &str| account == path || account.starts_with(&child_prefix);
+    let opening = journal
+        .transactions
+        .iter()
+        .filter(|transaction| range.before_start(transaction.date))
+        .flat_map(|transaction| &transaction.postings)
+        .filter(|posting| matches_account(&posting.account))
+        .map(|posting| posting.amount)
+        .sum();
+    let mut transactions: Vec<&Transaction> = range.transactions(journal).collect();
 
     transactions.sort_by_key(|transaction| transaction.date);
 
     let mut entries = Vec::new();
-    let mut balance = Decimal::ZERO;
+    let mut balance = opening;
 
     for transaction in transactions {
         for posting in &transaction.postings {
-            if posting.account == path || posting.account.starts_with(&child_prefix) {
+            if matches_account(&posting.account) {
                 balance += posting.amount;
 
                 entries.push(LedgerEntry {
@@ -39,7 +55,11 @@ pub fn ledger_entries(journal: &Journal, path: &str) -> Option<Vec<LedgerEntry>>
         }
     }
 
-    Some(entries)
+    Some(LedgerReport {
+        range,
+        opening,
+        entries,
+    })
 }
 
 pub struct PnlRow {
@@ -49,14 +69,15 @@ pub struct PnlRow {
 }
 
 pub struct PnlReport {
+    pub range: DateRange,
     pub rows: Vec<PnlRow>,
     pub net_result: Decimal,
 }
 
-/// Summarize all income and expenses, without date filtering or journal mutation.
-pub fn pnl(journal: &Journal) -> PnlReport {
+/// Summarize income and expenses within an inclusive date range without journal mutation.
+pub fn pnl(journal: &Journal, range: DateRange) -> PnlReport {
     let mut balances = HashMap::new();
-    for transaction in &journal.transactions {
+    for transaction in range.transactions(journal) {
         for posting in &transaction.postings {
             *balances
                 .entry(posting.account.as_str())
@@ -82,7 +103,11 @@ pub fn pnl(journal: &Journal) -> PnlReport {
         rows.extend(section);
     }
 
-    PnlReport { rows, net_result }
+    PnlReport {
+        range,
+        rows,
+        net_result,
+    }
 }
 
 fn pnl_account(
@@ -120,13 +145,19 @@ pub struct BsRow {
 }
 
 pub struct BsReport {
+    pub range: DateRange,
     pub rows: Vec<BsRow>,
 }
 
-/// Summarize accumulated balances across all transactions, including net result in equity.
-pub fn bs(journal: &Journal) -> BsReport {
+/// Summarize balances through the range's upper bound, including accumulated result in equity.
+pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
+    // A balance sheet never has a lower bound, even if a caller supplies one.
+    let range = DateRange {
+        from: None,
+        to: range.to,
+    };
     let mut balances = HashMap::new();
-    for transaction in &journal.transactions {
+    for transaction in range.transactions(journal) {
         for posting in &transaction.postings {
             *balances
                 .entry(posting.account.as_str())
@@ -134,8 +165,8 @@ pub fn bs(journal: &Journal) -> BsReport {
         }
     }
 
-    // Both reports currently include all dates. This is accumulated, not period profit.
-    let net_result = pnl(journal).net_result;
+    // Use the same unbounded-start selection: equity needs accumulated, not period profit.
+    let net_result = pnl(journal, range).net_result;
     // Include the calculated result in equity's total without changing the journal.
     *balances.entry("Equity").or_insert(Decimal::ZERO) -= net_result;
 
@@ -161,7 +192,7 @@ pub fn bs(journal: &Journal) -> BsReport {
         }
     }
 
-    BsReport { rows }
+    BsReport { range, rows }
 }
 
 fn bs_account(
@@ -194,15 +225,17 @@ fn bs_account(
 
 #[cfg(test)]
 mod tests {
-    use super::ledger_entries;
-    use crate::parser::parse_journal;
+    use super::ledger;
+    use crate::{dates::DateRange, parser::parse_journal};
     use rust_decimal::Decimal;
 
     #[test]
     fn ledger_includes_descendants_and_running_balances() {
         let journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
 
-        let cash = ledger_entries(&journal, "Assets/Cash").unwrap();
+        let cash = ledger(&journal, "Assets/Cash", DateRange::default())
+            .unwrap()
+            .entries;
         assert_eq!(cash.len(), 3);
         assert_eq!(cash[0].account, "Assets/Cash/Checking");
         assert_eq!(cash[0].balance, Decimal::from(200));
@@ -210,13 +243,20 @@ mod tests {
         assert_eq!(cash[1].balance, Decimal::from_str_exact("176.25").unwrap());
         assert_eq!(cash[2].balance, Decimal::from_str_exact("181.25").unwrap());
 
-        let groceries = ledger_entries(&journal, "Expenses/Food/Groceries").unwrap();
+        let groceries = ledger(&journal, "Expenses/Food/Groceries", DateRange::default())
+            .unwrap()
+            .entries;
         assert_eq!(groceries.len(), 2);
         assert_eq!(groceries[0].description, "Groceries and snacks");
         assert_eq!(groceries[1].description, "Small refund");
 
-        assert!(ledger_entries(&journal, "Expenses/Missing").is_none());
-        assert!(ledger_entries(&journal, "Income").unwrap().is_empty());
+        assert!(ledger(&journal, "Expenses/Missing", DateRange::default()).is_none());
+        assert!(
+            ledger(&journal, "Income", DateRange::default())
+                .unwrap()
+                .entries
+                .is_empty()
+        );
     }
 
     #[test]
@@ -224,7 +264,9 @@ mod tests {
         let mut journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
         journal.transactions.reverse();
 
-        let entries = ledger_entries(&journal, "Assets/Cash").unwrap();
+        let entries = ledger(&journal, "Assets/Cash", DateRange::default())
+            .unwrap()
+            .entries;
         assert_eq!(entries[0].description, "Opening balance");
         assert_eq!(entries[1].description, "Groceries and snacks");
         assert_eq!(entries[2].description, "Small refund");
@@ -244,7 +286,9 @@ mod tests {
         );
         let journal = parse_journal(&text).unwrap();
 
-        let food = ledger_entries(&journal, "Expenses/Food").unwrap();
+        let food = ledger(&journal, "Expenses/Food", DateRange::default())
+            .unwrap()
+            .entries;
         assert_eq!(food.len(), 3); // Groceries, snacks, and the refund.
         assert_eq!(food[2].balance, Decimal::from_str_exact("18.75").unwrap());
         assert!(

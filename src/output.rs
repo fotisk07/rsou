@@ -1,19 +1,31 @@
-use crate::queries::{BsReport, LedgerEntry, PnlReport};
+use crate::dates::DateRange;
+use crate::queries::{BsReport, LedgerReport, PnlReport};
+use jiff::civil::Date;
 use rust_decimal::Decimal;
 use tabled::{
     builder::Builder,
     settings::{Alignment, Modify, Style, object::Columns, style::HorizontalLine},
 };
 
-pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
-    if entries.is_empty() {
-        return format!("Ledger — {account}\n\nNo transactions.\nClosing balance: 0.00\n");
+pub fn format_ledger(account: &str, report: &LedgerReport, year: i32) -> String {
+    let heading = format!("Ledger | {account} | {}", format_period(report.range, year));
+    if report.entries.is_empty() && report.range.from.is_none() {
+        return format!("{heading}\n\nNo transactions.\nClosing balance: 0.00\n");
     }
 
     let mut builder = Builder::default();
     builder.push_record(["Date", "Account", "Description", "Amount", "Balance"]);
+    if report.range.from.is_some() {
+        builder.push_record([
+            String::new(),
+            String::new(),
+            "Opening balance".to_string(),
+            String::new(),
+            format_report_amount(report.opening),
+        ]);
+    }
 
-    for entry in entries {
+    for entry in &report.entries {
         builder.push_record([
             entry.date.to_string(),
             entry.account.clone(),
@@ -23,7 +35,10 @@ pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
         ]);
     }
 
-    let closing = entries.last().unwrap().balance; // Entries are nonempty here.
+    let closing = report
+        .entries
+        .last()
+        .map_or(report.opening, |entry| entry.balance);
     let closing_row = builder.count_records();
     builder.push_record([
         String::new(),
@@ -40,10 +55,10 @@ pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
     ]));
     table.with(Modify::new(Columns::new(3..5)).with(Alignment::right()));
 
-    format!("Ledger — {account}\n\n{table}\n")
+    format!("{heading}\n\n{table}\n")
 }
 
-pub fn format_pnl(report: &PnlReport) -> String {
+pub fn format_pnl(report: &PnlReport, year: i32) -> String {
     let mut builder = Builder::default();
     builder.push_record(["Account", "Amount"]);
     let expenses_start = report
@@ -83,7 +98,26 @@ pub fn format_pnl(report: &PnlReport) -> String {
         (result_row, HorizontalLine::new('─').intersection('─')),
     ]));
     table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
-    format!("Profit and Loss\n\n{table}\n")
+    format!(
+        "Profit and Loss | {}\n\n{table}\n",
+        format_period(report.range, year)
+    )
+}
+
+fn format_period(range: DateRange, year: i32) -> String {
+    let from = range
+        .from
+        .map(format_date)
+        .unwrap_or_else(|| format!("01 Jan {year:04}"));
+    let to = range
+        .to
+        .map(format_date)
+        .unwrap_or_else(|| format!("31 Dec {year:04}"));
+    format!("{from} to {to}")
+}
+
+fn format_date(date: Date) -> String {
+    date.strftime("%d %b %Y").to_string()
 }
 
 fn format_report_amount(amount: Decimal) -> String {
@@ -102,7 +136,7 @@ fn format_report_amount(amount: Decimal) -> String {
     format!("{grouped}.{fraction}")
 }
 
-pub fn format_bs(report: &BsReport) -> String {
+pub fn format_bs(report: &BsReport, year: i32) -> String {
     let mut builder = Builder::default();
     builder.push_record(["Account", "Amount"]);
     let mut rows = report.rows.iter().peekable();
@@ -137,21 +171,31 @@ pub fn format_bs(report: &BsReport) -> String {
         (total_row, HorizontalLine::new('─').intersection('─')),
     ]));
     table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
-    format!("Balance Sheet\n\n{table}\n")
+    let at = report
+        .range
+        .to
+        .map(format_date)
+        .unwrap_or_else(|| format!("31 Dec {year:04}"));
+    format!("Balance Sheet | As of {at}\n\n{table}\n")
 }
 
 #[cfg(test)]
 mod tests {
     use super::format_ledger;
-    use crate::{parser::parse_journal, queries::ledger_entries};
+    use crate::{
+        dates::DateRange,
+        parser::parse_journal,
+        queries::{LedgerReport, ledger},
+    };
+    use rust_decimal::Decimal;
 
     #[test]
     fn formats_cash_ledger() {
         let journal = parse_journal(include_str!("../test_data/split.sou")).unwrap();
-        let entries = ledger_entries(&journal, "Assets/Cash").unwrap();
-        let text = format_ledger("Assets/Cash", &entries);
+        let report = ledger(&journal, "Assets/Cash", DateRange::default()).unwrap();
+        let text = format_ledger("Assets/Cash", &report, journal.metadata.year);
 
-        assert!(text.starts_with("Ledger — Assets/Cash\n"));
+        assert!(text.starts_with("Ledger | Assets/Cash | 01 Jan 2026 to 31 Dec 2026\n"));
         assert!(text.contains("2026-02-03"));
         assert!(text.contains("Assets/Cash/Checking"));
         assert!(text.contains("Groceries and snacks"));
@@ -164,8 +208,16 @@ mod tests {
     #[test]
     fn formats_empty_ledger() {
         assert_eq!(
-            format_ledger("Income", &[]),
-            "Ledger — Income\n\nNo transactions.\nClosing balance: 0.00\n"
+            format_ledger(
+                "Income",
+                &LedgerReport {
+                    range: DateRange::default(),
+                    opening: Decimal::ZERO,
+                    entries: Vec::new(),
+                },
+                2026,
+            ),
+            "Ledger | Income | 01 Jan 2026 to 31 Dec 2026\n\nNo transactions.\nClosing balance: 0.00\n"
         );
     }
 }
