@@ -10,6 +10,27 @@ pub enum ValidationError {
     TooManyDecimalPlaces(String),
 }
 
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
+            Self::Unbalanced(description) => {
+                write!(f, "unbalanced transaction `{description}`")
+            }
+            Self::NotEnoughPostings => write!(f, "transaction needs at least two postings"),
+            Self::InvalidDescription => {
+                write!(f, "description must be nonempty and contain no line breaks")
+            }
+            Self::TooManyDecimalPlaces(account) => {
+                write!(
+                    f,
+                    "amount for `{account}` requires more than two decimal places"
+                )
+            }
+        }
+    }
+}
+
 pub fn validate_transaction(
     accounts: &Accounts,
     transaction: &Transaction,

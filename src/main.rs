@@ -7,7 +7,7 @@ mod write;
 
 use crate::models::{Journal, Posting, Transaction};
 use crate::parser::parse_journal;
-use crate::validation::{ValidationError, validate_journal, validate_transaction};
+use crate::validation::{validate_journal, validate_transaction};
 use clap::{Parser, Subcommand};
 use jiff::Zoned;
 use jiff::civil::Date;
@@ -43,40 +43,33 @@ enum Commands {
     },
 }
 fn main() {
-    let cli = Cli::parse();
-
-    let mut journal = match load_journal(&cli.journal_path) {
-        Ok(journal) => journal,
+    match run(Cli::parse()) {
+        Ok(Some(text)) => print!("{text}"),
+        Ok(None) => {}
         Err(error) => {
             eprintln!("{error}");
             std::process::exit(1);
         }
-    };
+    }
+}
+
+fn run(cli: Cli) -> Result<Option<String>, String> {
+    let mut journal = load_journal(&cli.journal_path)?;
 
     match cli.command {
         Commands::Sort => {
             journal.sort_transactions();
-            if let Err(error) = write::write_journal(cli.journal_path, &journal) {
-                eprintln!("failed saving: {error:?}");
-                std::process::exit(1);
-            }
+            write::write_journal(cli.journal_path, &journal)
+                .map_err(|error| format!("failed saving: {error}"))?;
+            Ok(Some("Journal sorted.\n".to_string()))
         }
-        Commands::Check => {
-            println!("{} is valid", cli.journal_path);
+        Commands::Check => Ok(Some(format!("{} is valid\n", cli.journal_path))),
+        Commands::Pnl => Ok(Some(output::format_pnl(&queries::pnl(&journal)))),
+        Commands::Ledger { account } => {
+            let entries = queries::ledger_entries(&journal, &account)
+                .ok_or_else(|| format!("unknown account `{account}`"))?;
+            Ok(Some(output::format_ledger(&account, &entries)))
         }
-
-        Commands::Pnl => {
-            print!("{}", output::format_pnl(&queries::pnl(&journal)));
-        }
-        Commands::Ledger { account } => match queries::ledger_entries(&journal, &account) {
-            Some(entries) => {
-                print!("{}", output::format_ledger(&account, &entries));
-            }
-            None => {
-                eprintln!("unknown account `{account}`");
-                std::process::exit(1);
-            }
-        },
         Commands::Post {
             amount,
             from_account,
@@ -84,11 +77,6 @@ fn main() {
             description,
             date,
         } => {
-            if amount <= Decimal::ZERO {
-                eprintln!("amount must be greater than zero");
-                std::process::exit(1);
-            }
-
             let postings = vec![
                 Posting {
                     account: from_account,
@@ -101,22 +89,13 @@ fn main() {
             ];
 
             let transaction = Transaction::new(date, description, postings);
-            match validate_transaction(&journal.accounts, &transaction) {
-                Ok(()) => {}
-                Err(error) => {
-                    eprintln!("invalid transaction: {error:?}");
-                    std::process::exit(1);
-                }
-            }
+            validate_transaction(&journal.accounts, &transaction)
+                .map_err(|error| format!("invalid transaction: {error}"))?;
 
             journal.transactions.push(transaction);
-            match write::write_journal(cli.journal_path, &journal) {
-                Ok(()) => {}
-                Err(error) => {
-                    eprintln!("failed saving: {error:?}");
-                    std::process::exit(1);
-                }
-            };
+            write::write_journal(cli.journal_path, &journal)
+                .map_err(|error| format!("failed saving: {error}"))?;
+            Ok(None)
         }
     }
 }
@@ -130,25 +109,7 @@ fn load_journal(path: &str) -> Result<Journal, String> {
         None => format!("parse error: {}", error.message),
     })?;
 
-    validate_journal(&journal).map_err(|error| match error {
-        ValidationError::UnknownAccount(account) => {
-            format!("validation error: unknown account `{account}`")
-        }
-        ValidationError::Unbalanced(description) => {
-            format!("validation error: unbalanced transaction `{description}`")
-        }
-        ValidationError::NotEnoughPostings => {
-            "validation error: transaction needs at least two postings".to_string()
-        }
-        ValidationError::InvalidDescription => {
-            "validation error: description must be nonempty and contain no line breaks".to_string()
-        }
-        ValidationError::TooManyDecimalPlaces(account) => {
-            format!(
-                "validation error: amount for `{account}` requires more than two decimal places"
-            )
-        }
-    })?;
+    validate_journal(&journal).map_err(|error| format!("validation error: {error}"))?;
 
     Ok(journal)
 }
