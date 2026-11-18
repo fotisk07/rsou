@@ -4,6 +4,7 @@ use rust_decimal::Decimal;
 #[derive(Debug, PartialEq)]
 pub enum ValidationError {
     UnknownAccount(String),
+    InvalidAccountName(String),
     Unbalanced(String),
     NotEnoughPostings,
     InvalidDescription,
@@ -14,6 +15,10 @@ impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
+            Self::InvalidAccountName(name) => write!(
+                f,
+                "invalid account name `{name}`: names must be nonempty and contain no whitespace, colons, or brackets"
+            ),
             Self::Unbalanced(description) => {
                 write!(f, "unbalanced transaction `{description}`")
             }
@@ -59,7 +64,36 @@ pub fn validate_transaction(
     Ok(())
 }
 
+pub fn validate_account_path(path: &str) -> Result<(), ValidationError> {
+    path.split("::").try_for_each(validate_account_name)
+}
+
+fn validate_account_name(name: &str) -> Result<(), ValidationError> {
+    if name.is_empty()
+        || name
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || matches!(c, ':' | '[' | ']'))
+    {
+        return Err(ValidationError::InvalidAccountName(name.to_string()));
+    }
+    Ok(())
+}
+
 pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
+    let mut accounts: Vec<_> = ["Assets", "Liabilities", "Equity", "Income", "Expenses"]
+        .iter()
+        .map(|root| {
+            journal
+                .accounts
+                .find_account(root)
+                .expect("built-in root account")
+        })
+        .collect();
+    while let Some(account) = accounts.pop() {
+        validate_account_name(&account.name)?;
+        accounts.extend(&account.children);
+    }
+
     for transaction in &journal.transactions {
         validate_transaction(&journal.accounts, transaction)?;
     }

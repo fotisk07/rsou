@@ -1,7 +1,18 @@
-use crate::models::{Account, Journal, Transaction};
+use crate::models::{Account, Accounts, Journal, Transaction};
 use std::io::{self, Write};
 use std::path::Path;
 use tempfile::NamedTempFile;
+
+pub fn format_accounts(accounts: &Accounts) -> String {
+    let mut text = String::new();
+    for root_name in ["Assets", "Liabilities", "Equity", "Income", "Expenses"] {
+        let root = accounts
+            .find_account(root_name)
+            .expect("root accounts always exist");
+        format_account(root, 0, &mut text);
+    }
+    text
+}
 
 fn format_account(account: &Account, depth: usize, text: &mut String) {
     text.push_str(&"  ".repeat(depth));
@@ -32,14 +43,7 @@ fn format_journal(journal: &Journal) -> String {
 
     // Accounts
     text.push_str("[ACCOUNTS]\n\n");
-    for root_name in ["Assets", "Liabilities", "Equity", "Income", "Expenses"] {
-        let root = journal
-            .accounts
-            .find_account(root_name)
-            .expect("root accounts always exist");
-
-        format_account(root, 0, &mut text);
-    }
+    text.push_str(&format_accounts(&journal.accounts));
 
     // Transactions
     text.push('\n');

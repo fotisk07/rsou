@@ -46,6 +46,18 @@ impl Accounts {
         }
     }
 
+    pub fn find_account_mut(&mut self, path: &str) -> Option<&mut Account> {
+        let mut parts = path.split("::");
+        let mut current = self.root_mut(parts.next()?)?;
+        for part in parts {
+            current = current
+                .children
+                .iter_mut()
+                .find(|child| child.name == part)?;
+        }
+        Some(current)
+    }
+
     pub fn find_account(&self, name: &str) -> Option<&Account> {
         let mut parts = name.split("::");
 

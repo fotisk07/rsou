@@ -5,10 +5,10 @@ mod queries;
 mod validation;
 mod write;
 
-use crate::models::{Journal, Posting, Transaction};
+use crate::models::{Account, Journal, Posting, Transaction};
 use crate::parser::parse_journal;
-use crate::validation::{validate_journal, validate_transaction};
-use clap::{Parser, Subcommand};
+use crate::validation::{validate_account_path, validate_journal, validate_transaction};
+use clap::{Parser, Subcommand, ValueEnum};
 use jiff::Zoned;
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -31,6 +31,13 @@ enum Commands {
     Check,
     Pnl,
     Bs,
+    List,
+    Add {
+        #[arg(value_enum)]
+        account_type: AccountType,
+        /// Account path relative to the root, e.g. Bank::Checking.
+        account: String,
+    },
     Ledger {
         account: String,
     },
@@ -43,6 +50,32 @@ enum Commands {
         date: Date,
     },
 }
+#[derive(Clone, ValueEnum)]
+enum AccountType {
+    #[value(name = "a")]
+    Assets,
+    #[value(name = "l")]
+    Liabilities,
+    #[value(name = "eq")]
+    Equity,
+    #[value(name = "i")]
+    Income,
+    #[value(name = "e")]
+    Expenses,
+}
+
+impl AccountType {
+    fn root_name(&self) -> &'static str {
+        match self {
+            Self::Assets => "Assets",
+            Self::Liabilities => "Liabilities",
+            Self::Equity => "Equity",
+            Self::Income => "Income",
+            Self::Expenses => "Expenses",
+        }
+    }
+}
+
 fn main() {
     match run(Cli::parse()) {
         Ok(Some(text)) => print!("{text}"),
@@ -63,6 +96,31 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             write::write_journal(cli.journal_path, &journal)
                 .map_err(|error| format!("failed saving: {error}"))?;
             Ok(Some("Journal sorted.\n".to_string()))
+        }
+        Commands::List => Ok(Some(write::format_accounts(&journal.accounts))),
+        Commands::Add {
+            account_type,
+            account,
+        } => {
+            let path = format!("{}::{}", account_type.root_name(), account);
+            validate_account_path(&path).map_err(|error| format!("invalid account: {error}"))?;
+            let (parent_path, name) = path
+                .rsplit_once("::")
+                .expect("root prefix includes separator");
+            let parent = journal
+                .accounts
+                .find_account_mut(parent_path)
+                .ok_or_else(|| format!("unknown parent account `{parent_path}`"))?;
+            if parent.children.iter().any(|child| child.name == name) {
+                return Err(format!("account `{path}` already exists"));
+            }
+            parent.children.push(Account {
+                name: name.to_string(),
+                children: Vec::new(),
+            });
+            write::write_journal(cli.journal_path, &journal)
+                .map_err(|error| format!("failed saving: {error}"))?;
+            Ok(None)
         }
         Commands::Check => Ok(Some(format!("{} is valid\n", cli.journal_path))),
         Commands::Pnl => Ok(Some(output::format_pnl(&queries::pnl(&journal)))),
