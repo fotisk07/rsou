@@ -1,4 +1,4 @@
-use crate::queries::LedgerEntry;
+use crate::queries::{LedgerEntry, PnlReport};
 use tabled::{
     builder::Builder,
     settings::{Alignment, Modify, Style, object::Columns},
@@ -36,6 +36,27 @@ pub fn format_ledger(account: &str, entries: &[LedgerEntry]) -> String {
     table.with(Modify::new(Columns::new(3..5)).with(Alignment::right()));
 
     format!("Ledger — {account}\n\n{table}\n")
+}
+
+pub fn format_pnl(report: &PnlReport) -> String {
+    let mut builder = Builder::default();
+    builder.push_record(["Account", "Amount"]);
+    for row in &report.rows {
+        builder.push_record([
+            format!("{}{}", "  ".repeat(row.depth), row.account),
+            format!("{:.2}", row.amount),
+        ]);
+    }
+    builder.push_record([String::new(), String::new()]);
+    builder.push_record([
+        "Net Result".to_string(),
+        format!("{:.2}", report.net_result),
+    ]);
+
+    let mut table = builder.build();
+    table.with(Style::blank());
+    table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
+    format!("Profit and loss\n\n{table}\n")
 }
 
 #[cfg(test)]

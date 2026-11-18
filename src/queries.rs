@@ -1,6 +1,7 @@
-use crate::models::{Journal, Transaction};
+use crate::models::{Account, Journal, Transaction};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
+use std::collections::HashMap;
 
 pub struct LedgerEntry {
     pub date: Date,
@@ -39,6 +40,76 @@ pub fn ledger_entries(journal: &Journal, path: &str) -> Option<Vec<LedgerEntry>>
     }
 
     Some(entries)
+}
+
+pub struct PnlRow {
+    pub account: String,
+    pub depth: usize,
+    pub amount: Decimal,
+}
+
+pub struct PnlReport {
+    pub rows: Vec<PnlRow>,
+    pub net_result: Decimal,
+}
+
+/// Summarize all income and expenses, without date filtering or journal mutation.
+pub fn pnl(journal: &Journal) -> PnlReport {
+    let mut balances = HashMap::new();
+    for transaction in &journal.transactions {
+        for posting in &transaction.postings {
+            *balances
+                .entry(posting.account.as_str())
+                .or_insert(Decimal::ZERO) += posting.amount;
+        }
+    }
+
+    let mut rows = Vec::new();
+    let mut net_result = Decimal::ZERO;
+    for root in ["Income", "Expenses"] {
+        let account = journal
+            .accounts
+            .find_account(root)
+            .expect("built-in root account");
+        let (total, mut section) = pnl_account(account, root, 0, &balances);
+        // Both income credits and expense debits reduce the raw accounting result.
+        net_result -= total;
+        if root == "Income" {
+            for row in &mut section {
+                row.amount = -row.amount;
+            }
+        }
+        rows.extend(section);
+    }
+
+    PnlReport { rows, net_result }
+}
+
+fn pnl_account(
+    account: &Account,
+    path: &str,
+    depth: usize,
+    balances: &HashMap<&str, Decimal>,
+) -> (Decimal, Vec<PnlRow>) {
+    let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
+    let mut descendants = Vec::new();
+    for child in &account.children {
+        let child_path = format!("{path}::{}", child.name);
+        let (child_total, child_rows) = pnl_account(child, &child_path, depth + 1, balances);
+        total += child_total;
+        descendants.extend(child_rows);
+    }
+
+    let mut rows = Vec::new();
+    if !total.is_zero() {
+        rows.push(PnlRow {
+            account: account.name.clone(),
+            depth,
+            amount: total,
+        });
+    }
+    rows.extend(descendants);
+    (total, rows)
 }
 
 #[cfg(test)]

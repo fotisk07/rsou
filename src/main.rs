@@ -29,6 +29,7 @@ struct Cli {
 enum Commands {
     Sort,
     Check,
+    Pnl,
     Ledger {
         account: String,
     },
@@ -64,6 +65,9 @@ fn main() {
             println!("{} is valid", cli.journal_path);
         }
 
+        Commands::Pnl => {
+            print!("{}", output::format_pnl(&queries::pnl(&journal)));
+        }
         Commands::Ledger { account } => match queries::ledger_entries(&journal, &account) {
             Some(entries) => {
                 print!("{}", output::format_ledger(&account, &entries));
