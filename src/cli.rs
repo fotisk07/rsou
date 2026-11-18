@@ -9,8 +9,9 @@ use rust_decimal::Decimal;
 
 #[derive(Parser)]
 #[command(name = "rsou")]
-#[command(about = "Personal accounting CLI")]
+#[command(about = "Personal accounting CLI", version)]
 pub(crate) struct Cli {
+    /// Journal file.
     #[arg(short = 'j', long, global = true, default_value = "journal.sou")]
     pub(crate) journal_path: String,
 
@@ -20,41 +21,56 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
-    /// Create a new journal without overwriting an existing file.
+    /// Create a journal; never overwrite.
     Init {
+        /// Journal name.
         #[arg(long, default_value = "Personal journal")]
         name: String,
+        /// Journal year.
         #[arg(short = 'y', long, default_value_t = i32::from(Zoned::now().year()), value_parser = clap::value_parser!(i32).range(1..=9999))]
         year: i32,
+        /// Three uppercase letters.
         #[arg(long, default_value = "EUR")]
         currency: String,
     },
+    /// Sort transactions by date.
     Sort,
+    /// Check journal validity.
     Check,
+    /// Show profit and loss.
+    #[command(after_help = "Default: current month; other journal years: all dates.")]
     Pnl {
         #[command(flatten)]
         period: PeriodArgs,
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
-        /// Number of account levels to display; 0 shows totals only.
+        /// Account levels; 0 = totals only.
         #[arg(long, default_value_t = 1)]
         depth: usize,
     },
+    /// Show the balance sheet.
+    #[command(after_help = "Default: current month-end; other journal years: all dates.")]
     Bs {
         #[command(flatten)]
         date: AsOfArgs,
-        /// Number of account levels to display; 0 shows totals only.
+        /// Account levels; 0 = totals only.
         #[arg(long, default_value_t = 1)]
         depth: usize,
     },
+    /// List the account tree.
     List,
+    /// Add an account under an existing parent.
     Add {
+        /// a=assets, l=liabilities, eq=equity, i=income, e=expenses.
         #[arg(value_enum)]
         account_type: AccountType,
-        /// Account path relative to the root, e.g. Bank/Checking.
+        /// Path within the type, e.g. Bank/Checking.
         account: String,
     },
+    /// Show account transactions and balances.
+    #[command(after_help = "Default: current month; other journal years: all dates.")]
     Ledger {
+        /// Account path, e.g. Assets/Bank.
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         account: String,
         #[command(flatten)]
@@ -62,16 +78,21 @@ pub(crate) enum Commands {
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
     },
+    /// Record a transaction.
     Post {
+        /// Amount to transfer; negatives reverse direction.
         #[arg(allow_negative_numbers = true)]
         amount: Decimal,
+        /// Source account.
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         from_account: String,
+        /// Destination account.
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         to_account: String,
+        /// Description; quotes optional.
         #[arg(required = true, num_args = 1..)]
         description: Vec<String>,
-        /// Posting date in DD-MM; the year comes from the journal.
+        /// Posting date in the journal year.
         #[arg(short, long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
         date: String,
     },
@@ -80,13 +101,13 @@ pub(crate) enum Commands {
 #[derive(Args)]
 #[group(multiple = false)]
 pub(crate) struct AsOfArgs {
-    /// Include all transactions through DD-MM in the journal year.
+    /// Through this date, inclusive (journal year).
     #[arg(long, value_name = "DD-MM")]
     at: Option<String>,
-    /// Include all transactions through the end of this month of the journal year.
+    /// Through month-end (1-12, journal year).
     #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
     month: Option<u8>,
-    /// Include all transactions through today; requires the current journal year.
+    /// Through today (current-year journals only).
     #[arg(long)]
     today: bool,
 }
@@ -107,10 +128,10 @@ impl AsOfArgs {
 
 #[derive(Args)]
 pub(crate) struct PeriodArgs {
-    /// Include transactions from DD-MM in the journal year (inclusive).
+    /// From this date, inclusive (journal year).
     #[arg(long, value_name = "DD-MM")]
     from: Option<String>,
-    /// Include transactions through DD-MM in the journal year (inclusive).
+    /// Through this date, inclusive (journal year).
     #[arg(long, value_name = "DD-MM")]
     to: Option<String>,
 }
@@ -129,22 +150,22 @@ impl PeriodArgs {
 #[derive(Args)]
 #[group(multiple = false, conflicts_with_all = ["from", "to"])]
 pub(crate) struct PeriodShortcuts {
-    /// Report a complete month of the journal year (1-12).
+    /// Whole month (1-12, journal year).
     #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
     month: Option<u8>,
-    /// Report a complete quarter of the journal year (1-4).
+    /// Whole quarter (1-4, journal year).
     #[arg(short = 'q', long, value_parser = clap::value_parser!(u8).range(1..=4))]
     quarter: Option<u8>,
-    /// Report from the start of the current month through today.
+    /// Month to date (current year only).
     #[arg(long)]
     mtd: bool,
-    /// Report from the start of the current quarter through today.
+    /// Quarter to date (current year only).
     #[arg(long)]
     qtd: bool,
-    /// Report from the start of the current year through today.
+    /// Year to date (current year only).
     #[arg(long)]
     ytd: bool,
-    /// Report the previous complete month within the current year.
+    /// Previous whole month (current year only).
     #[arg(long)]
     last_month: bool,
 }
