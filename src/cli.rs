@@ -4,7 +4,7 @@ use crate::{
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::ArgValueCompleter;
-use jiff::{Zoned, civil::Date};
+use jiff::Zoned;
 use rust_decimal::Decimal;
 
 #[derive(Parser)]
@@ -69,8 +69,9 @@ pub(crate) enum Commands {
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         to_account: String,
         description: String,
-        #[arg(short, long, default_value_t = Zoned::now().date())]
-        date: Date,
+        /// Posting date in DD-MM; the year comes from the journal.
+        #[arg(short, long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
+        date: String,
     },
 }
 

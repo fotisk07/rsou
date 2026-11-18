@@ -133,7 +133,7 @@ impl PeriodShortcut {
     }
 }
 
-fn parse_date(year: i32, value: &str) -> Result<Date, String> {
+pub(crate) fn parse_date(year: i32, value: &str) -> Result<Date, String> {
     let bytes = value.as_bytes();
     if bytes.len() != 5
         || bytes[2] != b'-'

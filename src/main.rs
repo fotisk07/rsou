@@ -142,6 +142,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             description,
             date,
         } => {
+            let date = dates::parse_date(journal.metadata.year, &date)?;
             let postings = vec![
                 Posting {
                     account: from_account,
