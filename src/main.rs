@@ -155,7 +155,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             ];
 
             let transaction = Transaction::new(date, description.join(" "), postings);
-            validate_transaction(&journal.accounts, &transaction)
+            validate_transaction(&journal, &transaction)
                 .map_err(|error| format!("invalid transaction: {error}"))?;
 
             journal.transactions.push(transaction);

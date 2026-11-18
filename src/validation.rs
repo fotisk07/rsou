@@ -1,4 +1,5 @@
-use crate::models::{Accounts, Journal, JournalMetadata, Transaction};
+use crate::models::{Journal, JournalMetadata, Transaction};
+use jiff::civil::Date;
 use rust_decimal::Decimal;
 
 #[derive(Debug, PartialEq)]
@@ -9,11 +10,15 @@ pub enum ValidationError {
     NotEnoughPostings,
     InvalidDescription,
     TooManyDecimalPlaces(String),
+    DateOutsideJournalYear { date: Date, year: i32 },
 }
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::DateOutsideJournalYear { date, year } => {
+                write!(f, "transaction date {date} is outside journal year {year}")
+            }
             Self::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
             Self::InvalidAccountName(name) => write!(
                 f,
@@ -37,9 +42,15 @@ impl std::fmt::Display for ValidationError {
 }
 
 pub fn validate_transaction(
-    accounts: &Accounts,
+    journal: &Journal,
     transaction: &Transaction,
 ) -> Result<(), ValidationError> {
+    if i32::from(transaction.date.year()) != journal.metadata.year {
+        return Err(ValidationError::DateOutsideJournalYear {
+            date: transaction.date,
+            year: journal.metadata.year,
+        });
+    }
     if transaction.description.trim().is_empty() || transaction.description.contains(['\n', '\r']) {
         return Err(ValidationError::InvalidDescription);
     }
@@ -53,7 +64,7 @@ pub fn validate_transaction(
                 posting.account.clone(),
             ));
         }
-        if accounts.find_account(&posting.account).is_none() {
+        if journal.accounts.find_account(&posting.account).is_none() {
             return Err(ValidationError::UnknownAccount(posting.account.clone()));
         }
         balance += posting.amount;
@@ -121,7 +132,7 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
     }
 
     for transaction in &journal.transactions {
-        validate_transaction(&journal.accounts, transaction)?;
+        validate_transaction(journal, transaction)?;
     }
     Ok(())
 }
