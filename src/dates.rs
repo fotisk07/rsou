@@ -7,19 +7,35 @@ pub struct DateRange {
     pub to: Option<Date>,
 }
 
-impl DateRange {
-    /// Resolve inclusive DD-MM bounds using the journal year. Missing bounds are open.
-    pub fn resolve(year: i32, from: Option<&str>, to: Option<&str>) -> Result<Self, String> {
-        let from = from.map(|value| parse_date(year, value)).transpose()?;
-        let to = to.map(|value| parse_date(year, value)).transpose()?;
+/// An unresolved date selection, independent of CLI parsing.
+#[derive(Default)]
+pub struct DateRequest<'a> {
+    pub from: Option<&'a str>,
+    pub to: Option<&'a str>,
+    pub shortcut: Option<PeriodShortcut>,
+}
+
+impl DateRequest<'_> {
+    /// Resolve explicit DD-MM bounds or a shortcut using the same calendar rules.
+    pub fn resolve(self, year: i32, today: Date) -> Result<DateRange, String> {
+        if let Some(shortcut) = self.shortcut {
+            if self.from.is_some() || self.to.is_some() {
+                return Err("date shortcuts cannot be combined with from/to dates".to_string());
+            }
+            return shortcut.resolve(year, today);
+        }
+        let from = self.from.map(|value| parse_date(year, value)).transpose()?;
+        let to = self.to.map(|value| parse_date(year, value)).transpose()?;
         if let (Some(from), Some(to)) = (from, to)
             && from > to
         {
             return Err("from date cannot be after to date".to_string());
         }
-        Ok(Self { from, to })
+        Ok(DateRange { from, to })
     }
+}
 
+impl DateRange {
     pub fn contains(self, date: Date) -> bool {
         self.from.is_none_or(|from| date >= from) && self.to.is_none_or(|to| date <= to)
     }
@@ -48,7 +64,7 @@ pub enum PeriodShortcut {
 
 impl PeriodShortcut {
     /// Resolve calendar shortcuts independently of CLI parsing and the system clock.
-    pub fn resolve(self, year: i32, today: Date) -> Result<DateRange, String> {
+    fn resolve(self, year: i32, today: Date) -> Result<DateRange, String> {
         if !matches!(self, Self::Month(_) | Self::Quarter(_)) && year != i32::from(today.year()) {
             return Err(format!(
                 "relative date shortcuts require journal year {} (found {year})",
