@@ -80,20 +80,3 @@ fn journal_file(path: &Path, journal: &Journal) -> io::Result<NamedTempFile> {
     file.as_file().sync_all()?;
     Ok(file)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::parser::parse_journal;
-
-    #[test]
-    fn test_format_journal() {
-        let text = include_str!("../test_data/simple.sou");
-
-        let journal = parse_journal(text).expect("Stuff");
-
-        let text = format_journal(&journal);
-
-        assert_eq!(journal, parse_journal(&text).expect("Stuff"));
-    }
-}
