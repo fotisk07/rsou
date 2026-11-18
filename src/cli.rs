@@ -32,9 +32,8 @@ pub(crate) enum Commands {
         depth: usize,
     },
     Bs {
-        /// Include all transactions through DD-MM in the journal year.
-        #[arg(long, value_name = "DD-MM")]
-        at: Option<String>,
+        #[command(flatten)]
+        date: AsOfArgs,
         /// Number of account levels to display; 0 shows totals only.
         #[arg(long, default_value_t = 1)]
         depth: usize,
@@ -64,6 +63,34 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value_t = Zoned::now().date())]
         date: Date,
     },
+}
+
+#[derive(Args)]
+#[group(multiple = false)]
+pub(crate) struct AsOfArgs {
+    /// Include all transactions through DD-MM in the journal year.
+    #[arg(long, value_name = "DD-MM")]
+    at: Option<String>,
+    /// Include all transactions through the end of this month of the journal year.
+    #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
+    month: Option<u8>,
+    /// Include all transactions through today; requires the current journal year.
+    #[arg(long)]
+    today: bool,
+}
+
+impl AsOfArgs {
+    pub(crate) fn request(&self) -> DateRequest<'_> {
+        DateRequest {
+            to: self.at.as_deref(),
+            shortcut: self
+                .month
+                .map(PeriodShortcut::Month)
+                .or(self.today.then_some(PeriodShortcut::Today)),
+            default_to_current_month: true,
+            ..DateRequest::default()
+        }
+    }
 }
 
 #[derive(Args)]

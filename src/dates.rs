@@ -13,8 +13,8 @@ pub struct DateRequest<'a> {
     pub from: Option<&'a str>,
     pub to: Option<&'a str>,
     pub shortcut: Option<PeriodShortcut>,
-    /// Period reports default to the current month only for current-year journals.
-    /// Leave false for cumulative reports such as a balance sheet.
+    /// Default to the current month only for current-year journals.
+    /// Cumulative reports use the resolved upper bound and ignore the lower bound.
     pub default_to_current_month: bool,
 }
 
@@ -70,6 +70,7 @@ pub enum PeriodShortcut {
     QuarterToDate,
     YearToDate,
     LastMonth,
+    Today,
 }
 
 impl PeriodShortcut {
@@ -96,6 +97,12 @@ impl PeriodShortcut {
             Self::MonthToDate => (current_month, current_month),
             Self::QuarterToDate => (quarter_start(current_month), current_month),
             Self::YearToDate => (1, current_month),
+            Self::Today => {
+                return Ok(DateRange {
+                    from: None,
+                    to: Some(today),
+                });
+            }
             Self::LastMonth => {
                 if current_month == 1 {
                     return Err("last month belongs to the previous year; use a journal for that year with -m 12".to_string());

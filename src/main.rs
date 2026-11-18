@@ -9,7 +9,6 @@ mod validation;
 mod write;
 
 use crate::cli::{Cli, Commands};
-use crate::dates::DateRequest;
 use crate::models::{Account, Journal, Posting, Transaction};
 use crate::parser::parse_journal;
 use crate::validation::{validate_account_path, validate_journal, validate_transaction};
@@ -79,12 +78,10 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 depth,
             )))
         }
-        Commands::Bs { at, depth } => {
-            let range = DateRequest {
-                to: at.as_deref(),
-                ..DateRequest::default()
-            }
-            .resolve(journal.metadata.year, Zoned::now().date())?;
+        Commands::Bs { date, depth } => {
+            let range = date
+                .request()
+                .resolve(journal.metadata.year, Zoned::now().date())?;
             Ok(Some(output::format_bs(
                 &queries::bs(&journal, range),
                 journal.metadata.year,
