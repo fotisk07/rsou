@@ -15,6 +15,17 @@ Cargo installs `sou` into `~/.cargo/bin` by default. Ensure that directory is on
 `PATH`. Run `cargo install --path .` again after pulling updates to rebuild and
 replace the installed executable.
 
+## Full-year reports
+
+Use the journal's full year, regardless of today's date:
+
+```sh
+sou pnl --year                 # January 1 through December 31
+sou bs --year                  # Balance sheet as of December 31
+sou pnl --year --by-month      # Full year in monthly columns
+sou pnl --year --by-quarter    # Full year in quarterly columns
+```
+
 ## Account completion
 
 Enable Tab completion by adding this to `~/.zshrc` (zsh):

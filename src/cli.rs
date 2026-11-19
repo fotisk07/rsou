@@ -238,6 +238,9 @@ impl RecurrenceArgs {
 #[derive(Args)]
 #[group(multiple = false)]
 pub(crate) struct AsOfArgs {
+    /// Through December 31 of the journal year.
+    #[arg(long)]
+    year: bool,
     /// Through this date, inclusive (journal year).
     #[arg(long, value_name = "DD-MM")]
     at: Option<String>,
@@ -256,7 +259,8 @@ impl AsOfArgs {
             shortcut: self
                 .month
                 .map(PeriodShortcut::Month)
-                .or(self.today.then_some(PeriodShortcut::Today)),
+                .or(self.today.then_some(PeriodShortcut::Today))
+                .or(self.year.then_some(PeriodShortcut::Year)),
             default_to_current_month: true,
             ..DateRequest::default()
         }
@@ -287,6 +291,9 @@ impl PeriodArgs {
 #[derive(Args)]
 #[group(multiple = false, conflicts_with_all = ["from", "to"])]
 pub(crate) struct PeriodShortcuts {
+    /// Whole journal year.
+    #[arg(long)]
+    year: bool,
     /// Whole month (1-12, journal year).
     #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
     month: Option<u8>,
@@ -317,6 +324,7 @@ impl PeriodShortcuts {
                 quarter: Some(quarter),
                 ..
             } => Some(PeriodShortcut::Quarter(*quarter)),
+            Self { year: true, .. } => Some(PeriodShortcut::Year),
             Self { mtd: true, .. } => Some(PeriodShortcut::MonthToDate),
             Self { qtd: true, .. } => Some(PeriodShortcut::QuarterToDate),
             Self { ytd: true, .. } => Some(PeriodShortcut::YearToDate),
@@ -324,6 +332,50 @@ impl PeriodShortcuts {
                 last_month: true, ..
             } => Some(PeriodShortcut::LastMonth),
             _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Commands};
+    use clap::Parser;
+    use jiff::civil::Date;
+
+    #[test]
+    fn year_selects_whole_journal_year_for_pnl_and_bs() {
+        let today = Date::new(2026, 6, 15).unwrap();
+        for year in [2024, 2026, 2027] {
+            for command in ["pnl", "bs"] {
+                let cli = Cli::try_parse_from(["sou", command, "--year"]).unwrap();
+                let request = match &cli.command {
+                    Commands::Pnl { period, shortcuts, .. } => period.request(shortcuts.selection()),
+                    Commands::Bs { date, .. } => date.request(),
+                    _ => unreachable!(),
+                };
+                let range = request.resolve(year, today).unwrap();
+                assert_eq!(range.from, Some(Date::new(year as i16, 1, 1).unwrap()));
+                assert_eq!(range.to, Some(Date::new(year as i16, 12, 31).unwrap()));
+            }
+        }
+    }
+
+    #[test]
+    fn year_conflicts_with_other_date_selections_but_allows_breakdowns() {
+        for args in [
+            vec!["pnl", "--year", "--month", "1"],
+            vec!["pnl", "--year", "--quarter", "1"],
+            vec!["pnl", "--year", "--ytd"],
+            vec!["pnl", "--year", "--from", "01-01"],
+            vec!["pnl", "--year", "--to", "31-12"],
+            vec!["bs", "--year", "--month", "1"],
+            vec!["bs", "--year", "--at", "31-12"],
+            vec!["bs", "--year", "--today"],
+        ] {
+            assert!(Cli::try_parse_from(std::iter::once("sou").chain(args)).is_err());
+        }
+        for breakdown in ["--by-month", "--by-quarter"] {
+            assert!(Cli::try_parse_from(["sou", "pnl", "--year", breakdown]).is_ok());
         }
     }
 }

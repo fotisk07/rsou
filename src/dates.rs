@@ -108,6 +108,7 @@ impl DateRange {
 
 #[derive(Clone, Copy)]
 pub enum PeriodShortcut {
+    Year,
     Month(u8),
     Quarter(u8),
     MonthToDate,
@@ -122,7 +123,7 @@ pub enum PeriodShortcut {
 impl PeriodShortcut {
     /// Resolve calendar shortcuts independently of CLI parsing and the system clock.
     fn resolve(self, year: i32, today: Date) -> Result<DateRange, String> {
-        if !matches!(self, Self::Month(_) | Self::Quarter(_)) && year != i32::from(today.year()) {
+        if !matches!(self, Self::Year | Self::Month(_) | Self::Quarter(_)) && year != i32::from(today.year()) {
             return Err(format!(
                 "relative date shortcuts require journal year {} (found {year})",
                 today.year()
@@ -132,6 +133,7 @@ impl PeriodShortcut {
         let current_month = today.month() as u8;
         let quarter_start = |month: u8| ((month - 1) / 3) * 3 + 1;
         let (first_month, last_month) = match self {
+            Self::Year => (1, 12),
             Self::Month(month) => (month, month),
             Self::Quarter(quarter) => {
                 if !(1..=4).contains(&quarter) {
