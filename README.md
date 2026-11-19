@@ -2,64 +2,76 @@
 
 A personal accounting CLI written in Rust.
 
-## Install
+Pitch: Basic accounting, in your terminal, in a plain text journal.
+Anti-pitch: Not a budgeting app or a dashboard. Other tools can do that.
 
-With Rust and Cargo installed, run from this repository:
+## Installation
+
+To use sou, clone this github repo and run
 
 ```sh
 cargo install --path .
-sou --help
 ```
 
-Cargo installs `sou` into `~/.cargo/bin` by default. Ensure that directory is on
-`PATH`. Run `cargo install --path .` again after pulling updates to rebuild and
-replace the installed executable.
+This installs sou in `~/.cargo/bin`. Make sure it is in your path.
 
-## Full-year reports
+## Quick start
 
-Use the journal's full year, regardless of today's date:
+To create your own `journal.sou`
 
 ```sh
-sou pnl --year                 # January 1 through December 31
-sou bs --year                  # Balance sheet as of December 31
-sou pnl --year --by-month      # Full year in monthly columns
-sou pnl --year --by-quarter    # Full year in quarterly columns
+sou init
 ```
 
-Omit the number from `--month` (`-m`) or `--quarter` (`-q`) to select the
-current whole month or quarter (current-year journals only). Explicit numbers
-still select a period in any journal year:
+You can create your accounts using `add` and post with `post`.
+
+```sh
+sou add Assets/Bank
+sou add Expenses/Food
+sou add Expenses/Household
+sou post 10 Assets/Bank Expenses/Food Coffee and lunch
+```
+
+You can do more complicated postings using `split`. The amounts must sum to zero.
+
+```sh
+sou split "Grocery run" Assets/Bank -50 Expenses/Food 40 Expenses/Household 10
+```
+
+To inspect your accounts use `list` and `ledger`, and to show your P&L and balance sheet use `pnl` and `bs`.
+
+```sh
+sou list
+sou ledger Assets/Bank
+sou pnl
+sou bs
+```
+
+You can choose the timeframe and how fine you want your P&L to be.
 
 ```sh
 sou pnl --month
-sou pnl --quarter
-sou bs --month                # Current month-end
-sou pnl --month 3
 sou pnl --quarter 2
+sou pnl --from 01-03 --to 15-06
+sou pnl --year --by-month --depth 2
+sou bs --to 30-06
 ```
 
-## Date selection
+Dates are `DD-MM`, in the journal year. Use `sou <command> --help` for the rest.
 
-All explicit dates use `DD-MM` in the journal year, with inclusive bounds.
+## Recurring postings
 
-- `pnl` and `ledger`: `--from` / `--to` select a range.
-- `bs` and `recur post`: `--to` selects a cutoff. Both accept `--year`,
-  `--month [1-12]`, `--quarter [1-4]`, `--week`, and `--today`.
-- Bare `--month` / `--quarter`, `--week`, and `--today` require a current-year
-  journal. `--week` means through Sunday, capped at December 31.
-- `bs` defaults to current month-end (year-end for other journal years).
-  `recur post` defaults to today; other-year journals need an explicit cutoff.
-- `recur add --start DD-MM` sets the first occurrence. Omitting `--start`
-  defaults to today only for current-year journals.
-
-The former cutoff flags `--at`, `--date`, and `-d` remain accepted as aliases
-for `--to` on `bs` and `recur post`.
+Create a template, then post what is due. Adding a template does not post anything.
 
 ```sh
-sou bs --to 30-06
-sou recur post --to 30-06 --dry-run
-sou recur post --month 6 --dry-run
+sou recur add Lunch Assets/Bank -10 Expenses/Food 10 --week
+sou recur list
+sou recur post --dry-run
+sou recur post
 ```
+
+Monthly by default. You can also use `--day`, `--week` or `--biweekly`.
+Use `--start DD-MM` to choose the first occurrence, otherwise it starts today in a current-year journal.
 
 ## Account completion
 
@@ -72,6 +84,5 @@ source <(COMPLETE=zsh sou)
 ```
 
 For bash, add `source <(COMPLETE=bash sou)` to `~/.bashrc` instead.
-Restart your shell, then press Tab while typing an account path, for example
-`sou ledger Assets/`. Accounts are read from `journal.sou` in the current
-directory; for another journal, put `-j path/to/journal.sou` before the command.
+
+Accounts come from `journal.sou` in the current directory. For another journal, put `-j path/to/journal.sou` before the command.
