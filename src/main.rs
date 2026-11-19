@@ -133,7 +133,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
         }
         Commands::Bs { date, depth } => {
             let range = date
-                .request()
+                .request(None)
                 .resolve(journal.metadata.year, Zoned::now().date())?;
             Ok(Some(output::format_bs(
                 &queries::bs(&journal, range),
@@ -167,7 +167,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             command: RecurCommands::Post { cutoff, dry_run },
         } => {
             let through = cutoff
-                .request()
+                .request(Some(dates::PeriodShortcut::Today))
                 .resolve(journal.metadata.year, Zoned::now().date())?
                 .to
                 .ok_or_else(|| "missing posting cutoff".to_string())?;
@@ -206,7 +206,11 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                     frequency,
                 },
         } => {
-            let start_date = dates::parse_date(journal.metadata.year, &start)?;
+            let start_date = dates::resolve_start_date(
+                journal.metadata.year,
+                start.as_deref(),
+                Zoned::now().date(),
+            )?;
             let recurring = RecurringTransaction {
                 frequency: frequency.frequency(),
                 start_date,

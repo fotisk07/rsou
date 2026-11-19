@@ -119,7 +119,6 @@ pub enum PeriodShortcut {
     LastMonth,
     Today,
     WeekEnd,
-    MonthEnd,
 }
 
 impl PeriodShortcut {
@@ -164,12 +163,6 @@ impl PeriodShortcut {
                     to: Some(to),
                 });
             }
-            Self::MonthEnd => {
-                return Ok(DateRange {
-                    from: None,
-                    to: Some(today.last_of_month()),
-                });
-            }
             Self::Today => {
                 return Ok(DateRange {
                     from: None,
@@ -204,6 +197,16 @@ impl PeriodShortcut {
             to: Some(to),
         })
     }
+}
+
+pub(crate) fn resolve_start_date(year: i32, start: Option<&str>, today: Date) -> Result<Date, String> {
+    if let Some(start) = start {
+        return parse_date(year, start);
+    }
+    if year != i32::from(today.year()) {
+        return Err(format!("--start is required for journal year {year}; defaulting to today requires journal year {}", today.year()));
+    }
+    Ok(today)
 }
 
 pub(crate) fn parse_date(year: i32, value: &str) -> Result<Date, String> {

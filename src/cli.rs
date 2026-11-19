@@ -68,7 +68,7 @@ pub(crate) enum Commands {
     )]
     Bs {
         #[command(flatten)]
-        date: AsOfArgs,
+        date: CutoffArgs,
         /// Account levels; 0 = totals only.
         #[arg(long, default_value_t = 1, display_order = 52)]
         depth: usize,
@@ -149,9 +149,9 @@ pub(crate) enum RecurCommands {
     /// Catch up recurring transactions through today by default.
     Post {
         #[command(flatten)]
-        cutoff: RecurringPostDates,
+        cutoff: CutoffArgs,
         /// Show transactions without saving or advancing next dates.
-        #[arg(long)]
+        #[arg(long, display_order = 50)]
         dry_run: bool,
     },
     /// Add a balanced recurring template; does not post transactions.
@@ -164,44 +164,12 @@ pub(crate) enum RecurCommands {
         /// Alternating account paths and signed amounts, which must sum to zero.
         #[arg(required = true, num_args = 1.., value_name = "ACCOUNT_AMOUNT", allow_negative_numbers = true)]
         postings: Vec<String>,
-        /// First occurrence in the journal year (defaults to today's day and month).
-        #[arg(long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
-        start: String,
+        /// First occurrence (DD-MM); defaults to today for current-year journals only.
+        #[arg(long, value_name = "DD-MM")]
+        start: Option<String>,
         #[command(flatten)]
         frequency: RecurrenceArgs,
     },
-}
-
-#[derive(Args)]
-#[group(multiple = false)]
-pub(crate) struct RecurringPostDates {
-    /// Catch up through Sunday, capped at journal year-end (current year only).
-    #[arg(long)]
-    week: bool,
-    /// Catch up through this month-end (current year only).
-    #[arg(long)]
-    month: bool,
-    /// Catch up through this date, inclusive (journal year).
-    #[arg(short, long, value_name = "DD-MM")]
-    date: Option<String>,
-}
-
-impl RecurringPostDates {
-    pub(crate) fn request(&self) -> DateRequest<'_> {
-        DateRequest {
-            to: self.date.as_deref(),
-            shortcut: if self.date.is_some() {
-                None
-            } else if self.week {
-                Some(PeriodShortcut::WeekEnd)
-            } else if self.month {
-                Some(PeriodShortcut::MonthEnd)
-            } else {
-                Some(PeriodShortcut::Today)
-            },
-            ..DateRequest::default()
-        }
-    }
 }
 
 #[derive(Args)]
@@ -237,31 +205,41 @@ impl RecurrenceArgs {
 
 #[derive(Args)]
 #[group(multiple = false)]
-pub(crate) struct AsOfArgs {
+pub(crate) struct CutoffArgs {
     /// Through December 31 of the journal year.
     #[arg(long, display_order = 10)]
     year: bool,
     /// Through this date, inclusive (journal year).
-    #[arg(long, value_name = "DD-MM", display_order = 30)]
-    at: Option<String>,
+    #[arg(long, aliases = ["at", "date"], short_alias = 'd', value_name = "DD-MM", display_order = 30)]
+    to: Option<String>,
     /// Through month-end; omit the number for the current month (current year only).
     #[arg(short = 'm', long, num_args = 0..=1, value_parser = clap::value_parser!(u8).range(1..=12), display_order = 11)]
     month: Option<Option<u8>>,
+    /// Through quarter-end; omit the number for the current quarter (current year only).
+    #[arg(short = 'q', long, num_args = 0..=1, value_parser = clap::value_parser!(u8).range(1..=4), display_order = 12)]
+    quarter: Option<Option<u8>>,
+    /// Through Sunday, capped at year-end (current year only).
+    #[arg(long, display_order = 13)]
+    week: bool,
     /// Through today (current-year journals only).
     #[arg(long, display_order = 20)]
     today: bool,
 }
 
-impl AsOfArgs {
-    pub(crate) fn request(&self) -> DateRequest<'_> {
+impl CutoffArgs {
+    /// With no explicit default shortcut, reports default to current month-end.
+    pub(crate) fn request(&self, default: Option<PeriodShortcut>) -> DateRequest<'_> {
         DateRequest {
-            to: self.at.as_deref(),
+            to: self.to.as_deref(),
             shortcut: self
                 .month
                 .map(|month| month.map_or(PeriodShortcut::CurrentMonth, PeriodShortcut::Month))
+                .or(self.quarter.map(|quarter| quarter.map_or(PeriodShortcut::CurrentQuarter, PeriodShortcut::Quarter)))
+                .or(self.week.then_some(PeriodShortcut::WeekEnd))
                 .or(self.today.then_some(PeriodShortcut::Today))
-                .or(self.year.then_some(PeriodShortcut::Year)),
-            default_to_current_month: true,
+                .or(self.year.then_some(PeriodShortcut::Year))
+                .or(default.filter(|_| self.to.is_none())),
+            default_to_current_month: default.is_none(),
             ..DateRequest::default()
         }
     }
@@ -343,16 +321,76 @@ mod tests {
     use jiff::civil::Date;
 
     #[test]
+    fn recurring_start_defaults_to_today_only_in_current_year() {
+        use crate::dates::resolve_start_date;
+        let today = Date::new(2026, 6, 15).unwrap();
+        assert_eq!(resolve_start_date(2026, None, today).unwrap(), today);
+        assert!(resolve_start_date(2025, None, today).is_err());
+        assert_eq!(resolve_start_date(2025, Some("10-03"), today).unwrap(), Date::new(2025, 3, 10).unwrap());
+        assert!(resolve_start_date(2025, Some("29-02"), today).is_err());
+    }
+
+    #[test]
+    fn balance_sheet_and_recurring_share_cutoffs_but_keep_their_defaults() {
+        use super::RecurCommands;
+        use crate::dates::PeriodShortcut;
+        let today = Date::new(2026, 6, 15).unwrap();
+        for (args, month, day, relative) in [
+            (vec!["--to", "10-03"], 3, 10, false),
+            (vec!["--at", "10-03"], 3, 10, false),
+            (vec!["--date", "10-03"], 3, 10, false),
+            (vec!["-d", "10-03"], 3, 10, false),
+            (vec!["--month"], 6, 30, true),
+            (vec!["--month", "2"], 2, 28, false),
+            (vec!["--quarter"], 6, 30, true),
+            (vec!["--quarter", "4"], 12, 31, false),
+            (vec!["--year"], 12, 31, false),
+            (vec!["--today"], 6, 15, true),
+            (vec!["--week"], 6, 21, true),
+        ] {
+            for prefix in [vec!["sou", "bs"], vec!["sou", "recur", "post"]] {
+                let cli = Cli::try_parse_from(prefix.into_iter().chain(args.iter().copied())).unwrap();
+                for year in [2025, 2026] {
+                    let request = match &cli.command {
+                        Commands::Bs { date, .. } => date.request(None),
+                        Commands::Recur { command: RecurCommands::Post { cutoff, .. } } => cutoff.request(Some(PeriodShortcut::Today)),
+                        _ => unreachable!(),
+                    };
+                    let result = request.resolve(year, today);
+                    if relative && year != 2026 {
+                        assert!(result.is_err());
+                    } else {
+                        assert_eq!(result.unwrap().to, Some(Date::new(year as i16, month, day).unwrap()));
+                    }
+                }
+            }
+        }
+        for command in [vec!["sou", "bs"], vec!["sou", "recur", "post"]] {
+            for args in [vec!["--to", "01-01", "--month"], vec!["--year", "--today"], vec!["--quarter", "5"]] {
+                assert!(Cli::try_parse_from(command.iter().copied().chain(args)).is_err());
+            }
+            let cli = Cli::try_parse_from(command).unwrap();
+            let request = match &cli.command {
+                Commands::Bs { date, .. } => date.request(None),
+                Commands::Recur { command: RecurCommands::Post { cutoff, .. } } => cutoff.request(Some(PeriodShortcut::Today)),
+                _ => unreachable!(),
+            };
+            let expected = if matches!(cli.command, Commands::Bs { .. }) { 30 } else { 15 };
+            assert_eq!(request.resolve(2026, today).unwrap().to, Some(Date::new(2026, 6, expected).unwrap()));
+        }
+    }
+
+    #[test]
     fn report_help_keeps_date_display_and_global_options_in_order() {
         for (command, options) in [
             ("pnl", vec!["--year", "--month", "--quarter", "--last-month", "--mtd", "--qtd", "--ytd", "--from", "--to", "--by-month", "--by-quarter", "--depth", "--journal-path", "--help"]),
-            ("bs", vec!["--year", "--month", "--today", "--at", "--depth", "--journal-path", "--help"]),
+            ("bs", vec!["--year", "--month", "--quarter", "--week", "--today", "--to", "--depth", "--journal-path", "--help"]),
             ("ledger", vec!["--year", "--month", "--quarter", "--last-month", "--mtd", "--qtd", "--ytd", "--from", "--to", "--journal-path", "--help"]),
         ] {
             let mut cli = Cli::command();
             cli.build();
             let help = cli.find_subcommand_mut(command).unwrap().render_help().to_string();
-            let positions: Vec<_> = options.iter().map(|option| help.find(option).unwrap()).collect();
+            let positions: Vec<_> = options.iter().map(|option| help.find(&format!("{option} ")).unwrap()).collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]), "{help}");
         }
     }
@@ -376,7 +414,7 @@ mod tests {
             for year in [2025, 2026] {
                 let request = match &cli.command {
                     Commands::Pnl { period, shortcuts, .. } => period.request(shortcuts.selection()),
-                    Commands::Bs { date, .. } => date.request(),
+                    Commands::Bs { date, .. } => date.request(None),
                     _ => unreachable!(),
                 };
                 let result = request.resolve(year, today);
@@ -409,7 +447,7 @@ mod tests {
                 let cli = Cli::try_parse_from(["sou", command, "--year"]).unwrap();
                 let request = match &cli.command {
                     Commands::Pnl { period, shortcuts, .. } => period.request(shortcuts.selection()),
-                    Commands::Bs { date, .. } => date.request(),
+                    Commands::Bs { date, .. } => date.request(None),
                     _ => unreachable!(),
                 };
                 let range = request.resolve(year, today).unwrap();
