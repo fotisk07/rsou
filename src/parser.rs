@@ -50,9 +50,12 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
             .bytes()
             .filter(|&byte| byte == b'\n')
             .count();
-    let (accounts_text, aliases_text) = before_transactions
+    let (account_sections, recurring_text) = before_transactions
+        .split_once("[RECURRING]")
+        .unwrap_or((before_transactions, ""));
+    let (accounts_text, aliases_text) = account_sections
         .split_once("[ALIASES]")
-        .map_or((before_transactions, None), |(accounts, aliases)| {
+        .map_or((account_sections, None), |(accounts, aliases)| {
             (accounts, Some(aliases))
         });
     let accounts = parse_accounts(accounts_text, accounts_line)?;
@@ -62,11 +65,8 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
     } else {
         Vec::new()
     };
-    let (transactions_text, recurring_text) = transactions_text
-        .split_once("\n[RECURRING]")
-        .ok_or_else(|| ParseError::new("missing [RECURRING] section"))?;
     let recurring_line =
-        transactions_line + transactions_text.bytes().filter(|&b| b == b'\n').count() + 1;
+        accounts_line + account_sections.bytes().filter(|&b| b == b'\n').count();
     let transactions = parse_transactions(transactions_text, transactions_line)?;
     let recurring_transactions = parse_recurring(recurring_text, recurring_line)?;
     let metadata = parse_metadata(metadata_text, metadata_line)?;
@@ -333,4 +333,16 @@ fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetad
         year: year.ok_or_else(|| ParseError::new("missing metadata field `year`"))?,
         currency: currency.ok_or_else(|| ParseError::new("missing metadata field `currency`"))?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_journal;
+
+    #[test]
+    fn older_journal_without_recurring_section_still_parses() {
+        let journal = parse_journal(include_str!("../test/simple.sou")).unwrap();
+        assert_eq!(journal.transactions.len(), 2);
+        assert!(journal.recurring_transactions.is_empty());
+    }
 }
