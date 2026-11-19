@@ -26,6 +26,18 @@ sou pnl --year --by-month      # Full year in monthly columns
 sou pnl --year --by-quarter    # Full year in quarterly columns
 ```
 
+Omit the number from `--month` (`-m`) or `--quarter` (`-q`) to select the
+current whole month or quarter (current-year journals only). Explicit numbers
+still select a period in any journal year:
+
+```sh
+sou pnl --month
+sou pnl --quarter
+sou bs --month                # Current month-end
+sou pnl --month 3
+sou pnl --quarter 2
+```
+
 ## Account completion
 
 Enable Tab completion by adding this to `~/.zshrc` (zsh):

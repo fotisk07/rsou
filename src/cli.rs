@@ -13,7 +13,7 @@ use rust_decimal::Decimal;
 #[command(about = "Personal accounting CLI", version)]
 pub(crate) struct Cli {
     /// Journal file.
-    #[arg(short = 'j', long, global = true, default_value = "journal.sou")]
+    #[arg(short = 'j', long, global = true, default_value = "journal.sou", display_order = 100)]
     pub(crate) journal_path: String,
 
     #[command(subcommand)]
@@ -52,13 +52,13 @@ pub(crate) enum Commands {
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
         /// Break the selected period into monthly columns.
-        #[arg(long, conflicts_with = "by_quarter")]
+        #[arg(long, conflicts_with = "by_quarter", display_order = 50)]
         by_month: bool,
         /// Break the selected period into quarterly columns.
-        #[arg(long)]
+        #[arg(long, display_order = 51)]
         by_quarter: bool,
         /// Account levels; 0 = totals only.
-        #[arg(long, default_value_t = 1)]
+        #[arg(long, default_value_t = 1, display_order = 52)]
         depth: usize,
     },
     /// Show the balance sheet.
@@ -70,7 +70,7 @@ pub(crate) enum Commands {
         #[command(flatten)]
         date: AsOfArgs,
         /// Account levels; 0 = totals only.
-        #[arg(long, default_value_t = 1)]
+        #[arg(long, default_value_t = 1, display_order = 52)]
         depth: usize,
     },
     /// List the account tree.
@@ -239,16 +239,16 @@ impl RecurrenceArgs {
 #[group(multiple = false)]
 pub(crate) struct AsOfArgs {
     /// Through December 31 of the journal year.
-    #[arg(long)]
+    #[arg(long, display_order = 10)]
     year: bool,
     /// Through this date, inclusive (journal year).
-    #[arg(long, value_name = "DD-MM")]
+    #[arg(long, value_name = "DD-MM", display_order = 30)]
     at: Option<String>,
-    /// Through month-end (1-12, journal year).
-    #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
-    month: Option<u8>,
+    /// Through month-end; omit the number for the current month (current year only).
+    #[arg(short = 'm', long, num_args = 0..=1, value_parser = clap::value_parser!(u8).range(1..=12), display_order = 11)]
+    month: Option<Option<u8>>,
     /// Through today (current-year journals only).
-    #[arg(long)]
+    #[arg(long, display_order = 20)]
     today: bool,
 }
 
@@ -258,7 +258,7 @@ impl AsOfArgs {
             to: self.at.as_deref(),
             shortcut: self
                 .month
-                .map(PeriodShortcut::Month)
+                .map(|month| month.map_or(PeriodShortcut::CurrentMonth, PeriodShortcut::Month))
                 .or(self.today.then_some(PeriodShortcut::Today))
                 .or(self.year.then_some(PeriodShortcut::Year)),
             default_to_current_month: true,
@@ -270,10 +270,10 @@ impl AsOfArgs {
 #[derive(Args)]
 pub(crate) struct PeriodArgs {
     /// From this date, inclusive (journal year).
-    #[arg(long, value_name = "DD-MM")]
+    #[arg(long, value_name = "DD-MM", display_order = 30)]
     from: Option<String>,
     /// Through this date, inclusive (journal year).
-    #[arg(long, value_name = "DD-MM")]
+    #[arg(long, value_name = "DD-MM", display_order = 31)]
     to: Option<String>,
 }
 
@@ -292,25 +292,25 @@ impl PeriodArgs {
 #[group(multiple = false, conflicts_with_all = ["from", "to"])]
 pub(crate) struct PeriodShortcuts {
     /// Whole journal year.
-    #[arg(long)]
+    #[arg(long, display_order = 10)]
     year: bool,
-    /// Whole month (1-12, journal year).
-    #[arg(short = 'm', long, value_parser = clap::value_parser!(u8).range(1..=12))]
-    month: Option<u8>,
-    /// Whole quarter (1-4, journal year).
-    #[arg(short = 'q', long, value_parser = clap::value_parser!(u8).range(1..=4))]
-    quarter: Option<u8>,
+    /// Whole month (1-12); omit the number for the current month (current year only).
+    #[arg(short = 'm', long, num_args = 0..=1, value_parser = clap::value_parser!(u8).range(1..=12), display_order = 11)]
+    month: Option<Option<u8>>,
+    /// Whole quarter (1-4); omit the number for the current quarter (current year only).
+    #[arg(short = 'q', long, num_args = 0..=1, value_parser = clap::value_parser!(u8).range(1..=4), display_order = 12)]
+    quarter: Option<Option<u8>>,
     /// Month to date (current year only).
-    #[arg(long)]
+    #[arg(long, display_order = 20)]
     mtd: bool,
     /// Quarter to date (current year only).
-    #[arg(long)]
+    #[arg(long, display_order = 21)]
     qtd: bool,
     /// Year to date (current year only).
-    #[arg(long)]
+    #[arg(long, display_order = 22)]
     ytd: bool,
     /// Previous whole month (current year only).
-    #[arg(long)]
+    #[arg(long, display_order = 13)]
     last_month: bool,
 }
 
@@ -319,11 +319,11 @@ impl PeriodShortcuts {
         match self {
             Self {
                 month: Some(month), ..
-            } => Some(PeriodShortcut::Month(*month)),
+            } => Some(month.map_or(PeriodShortcut::CurrentMonth, PeriodShortcut::Month)),
             Self {
                 quarter: Some(quarter),
                 ..
-            } => Some(PeriodShortcut::Quarter(*quarter)),
+            } => Some(quarter.map_or(PeriodShortcut::CurrentQuarter, PeriodShortcut::Quarter)),
             Self { year: true, .. } => Some(PeriodShortcut::Year),
             Self { mtd: true, .. } => Some(PeriodShortcut::MonthToDate),
             Self { qtd: true, .. } => Some(PeriodShortcut::QuarterToDate),
@@ -339,8 +339,67 @@ impl PeriodShortcuts {
 #[cfg(test)]
 mod tests {
     use super::{Cli, Commands};
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
     use jiff::civil::Date;
+
+    #[test]
+    fn report_help_keeps_date_display_and_global_options_in_order() {
+        for (command, options) in [
+            ("pnl", vec!["--year", "--month", "--quarter", "--last-month", "--mtd", "--qtd", "--ytd", "--from", "--to", "--by-month", "--by-quarter", "--depth", "--journal-path", "--help"]),
+            ("bs", vec!["--year", "--month", "--today", "--at", "--depth", "--journal-path", "--help"]),
+            ("ledger", vec!["--year", "--month", "--quarter", "--last-month", "--mtd", "--qtd", "--ytd", "--from", "--to", "--journal-path", "--help"]),
+        ] {
+            let mut cli = Cli::command();
+            cli.build();
+            let help = cli.find_subcommand_mut(command).unwrap().render_help().to_string();
+            let positions: Vec<_> = options.iter().map(|option| help.find(option).unwrap()).collect();
+            assert!(positions.windows(2).all(|pair| pair[0] < pair[1]), "{help}");
+        }
+    }
+
+    #[test]
+    fn optional_period_numbers_select_current_or_explicit_periods() {
+        let today = Date::new(2026, 6, 15).unwrap();
+        for (args, from, to, relative) in [
+            (vec!["pnl", "--month"], (6, 1), (6, 30), true),
+            (vec!["pnl", "-m"], (6, 1), (6, 30), true),
+            (vec!["pnl", "--quarter"], (4, 1), (6, 30), true),
+            (vec!["pnl", "-q"], (4, 1), (6, 30), true),
+            (vec!["pnl", "--month", "--by-month"], (6, 1), (6, 30), true),
+            (vec!["pnl", "--quarter", "--by-quarter"], (4, 1), (6, 30), true),
+            (vec!["bs", "--month"], (6, 1), (6, 30), true),
+            (vec!["bs", "--month", "2"], (2, 1), (2, 28), false),
+            (vec!["pnl", "--month", "3"], (3, 1), (3, 31), false),
+            (vec!["pnl", "--quarter", "4"], (10, 1), (12, 31), false),
+        ] {
+            let cli = Cli::try_parse_from(std::iter::once("sou").chain(args)).unwrap();
+            for year in [2025, 2026] {
+                let request = match &cli.command {
+                    Commands::Pnl { period, shortcuts, .. } => period.request(shortcuts.selection()),
+                    Commands::Bs { date, .. } => date.request(),
+                    _ => unreachable!(),
+                };
+                let result = request.resolve(year, today);
+                if relative && year != 2026 {
+                    assert!(result.err().unwrap().contains("relative date shortcuts"));
+                } else {
+                    let range = result.unwrap();
+                    assert_eq!(range.from, Some(Date::new(year as i16, from.0, from.1).unwrap()));
+                    assert_eq!(range.to, Some(Date::new(year as i16, to.0, to.1).unwrap()));
+                }
+            }
+        }
+        for args in [
+            vec!["pnl", "--month", "0"],
+            vec!["pnl", "--month", "13"],
+            vec!["pnl", "--quarter", "5"],
+            vec!["pnl", "--month", "--quarter"],
+            vec!["pnl", "--month", "--from", "01-01"],
+            vec!["bs", "--month", "--today"],
+        ] {
+            assert!(Cli::try_parse_from(std::iter::once("sou").chain(args)).is_err());
+        }
+    }
 
     #[test]
     fn year_selects_whole_journal_year_for_pnl_and_bs() {

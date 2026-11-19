@@ -111,6 +111,8 @@ pub enum PeriodShortcut {
     Year,
     Month(u8),
     Quarter(u8),
+    CurrentMonth,
+    CurrentQuarter,
     MonthToDate,
     QuarterToDate,
     YearToDate,
@@ -142,7 +144,11 @@ impl PeriodShortcut {
                 let first = (quarter - 1) * 3 + 1;
                 (first, first + 2)
             }
-            Self::MonthToDate => (current_month, current_month),
+            Self::CurrentMonth | Self::MonthToDate => (current_month, current_month),
+            Self::CurrentQuarter => {
+                let first = quarter_start(current_month);
+                (first, first + 2)
+            },
             Self::QuarterToDate => (quarter_start(current_month), current_month),
             Self::YearToDate => (1, current_month),
             Self::WeekEnd => {
