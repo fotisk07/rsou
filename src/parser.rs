@@ -1,5 +1,6 @@
 use crate::models::{
-    Account, AccountAlias, Accounts, Journal, JournalMetadata, Posting, Transaction,
+    Account, AccountAlias, Accounts, Journal, JournalMetadata, Posting, RecurringTransaction,
+    Transaction,
 };
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -61,7 +62,13 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
     } else {
         Vec::new()
     };
+    let (transactions_text, recurring_text) = transactions_text
+        .split_once("\n[RECURRING]")
+        .ok_or_else(|| ParseError::new("missing [RECURRING] section"))?;
+    let recurring_line =
+        transactions_line + transactions_text.bytes().filter(|&b| b == b'\n').count() + 1;
     let transactions = parse_transactions(transactions_text, transactions_line)?;
+    let recurring_transactions = parse_recurring(recurring_text, recurring_line)?;
     let metadata = parse_metadata(metadata_text, metadata_line)?;
 
     Ok(Journal {
@@ -69,6 +76,7 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
         accounts,
         aliases,
         transactions,
+        recurring_transactions,
     })
 }
 
@@ -168,33 +176,7 @@ fn parse_transactions(
 
         while lines.peek().is_some_and(|(_, line)| line.starts_with(' ')) {
             let (index, posting_line) = lines.next().unwrap(); // Safe: peek found a posting.
-            let posting_line_number = section_line + index;
-            let mut posting_parts = posting_line.split_whitespace();
-            let account_str = posting_parts
-                .next()
-                .ok_or_else(|| ParseError::at(posting_line_number, "missing posting account"))?;
-            let amount_str = posting_parts
-                .next()
-                .ok_or_else(|| ParseError::at(posting_line_number, "missing posting amount"))?;
-
-            if posting_parts.next().is_some() {
-                return Err(ParseError::at(
-                    posting_line_number,
-                    "unexpected text after posting amount",
-                ));
-            }
-
-            let amount = Decimal::from_str(amount_str).map_err(|_| {
-                ParseError::at(
-                    posting_line_number,
-                    format!("invalid amount `{amount_str}`"),
-                )
-            })?;
-
-            postings.push(Posting {
-                account: account_str.to_string(),
-                amount,
-            });
+            postings.push(parse_posting(posting_line, section_line + index)?);
         }
         transactions.push(Transaction {
             date,
@@ -203,6 +185,87 @@ fn parse_transactions(
         });
     }
     Ok(transactions)
+}
+
+fn parse_posting(line: &str, line_number: usize) -> Result<Posting, ParseError> {
+    let mut parts = line.split_whitespace();
+    let account = parts
+        .next()
+        .ok_or_else(|| ParseError::at(line_number, "missing posting account"))?;
+    let amount = parts
+        .next()
+        .ok_or_else(|| ParseError::at(line_number, "missing posting amount"))?;
+    if parts.next().is_some() {
+        return Err(ParseError::at(
+            line_number,
+            "unexpected text after posting amount",
+        ));
+    }
+    let amount = Decimal::from_str(amount)
+        .map_err(|_| ParseError::at(line_number, format!("invalid amount `{amount}`")))?;
+    Ok(Posting {
+        account: account.to_string(),
+        amount,
+    })
+}
+
+fn parse_recurring(
+    text: &str,
+    section_line: usize,
+) -> Result<Vec<RecurringTransaction>, ParseError> {
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| !line.trim().is_empty())
+        .peekable();
+    let mut templates = Vec::new();
+    while let Some((index, header)) = lines.next() {
+        let line_number = section_line + index;
+        let (frequency, rest) = header
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| ParseError::at(line_number, "expected FREQUENCY DATE DESCRIPTION"))?;
+        let frequency = frequency
+            .parse()
+            .map_err(|error: String| ParseError::at(line_number, error))?;
+        let (start, description) = rest
+            .trim_start()
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| ParseError::at(line_number, "expected FREQUENCY DATE DESCRIPTION"))?;
+        let start_date = start.parse::<Date>().map_err(|_| {
+            ParseError::at(
+                line_number,
+                format!("invalid recurring start date `{start}`"),
+            )
+        })?;
+        let mut next_date = None;
+        let mut postings = Vec::new();
+        while lines.peek().is_some_and(|(_, line)| line.starts_with(' ')) {
+            let (index, line) = lines.next().unwrap();
+            let line_number = section_line + index;
+            if let Some(value) = line.trim().strip_prefix("next:") {
+                if next_date.is_some() {
+                    return Err(ParseError::at(line_number, "duplicate recurring next date"));
+                }
+                next_date = Some(
+                    value
+                        .trim()
+                        .parse::<Date>()
+                        .map_err(|_| ParseError::at(line_number, "invalid recurring next date"))?,
+                );
+            } else {
+                postings.push(parse_posting(line, line_number)?);
+            }
+        }
+        templates.push(RecurringTransaction {
+            frequency,
+            start_date,
+            next_date: next_date
+                .ok_or_else(|| ParseError::at(line_number, "missing recurring next date"))?,
+            description: description.to_string(),
+            postings,
+        });
+    }
+    Ok(templates)
 }
 
 fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetadata, ParseError> {

@@ -61,6 +61,16 @@ fn format_journal(journal: &Journal) -> String {
         }
         format_transaction(transaction, &mut text);
     }
+    text.push_str("\n[RECURRING]\n");
+    for recurring in &journal.recurring_transactions {
+        text.push_str(&format!(
+            "\n{} {} {}\n  next: {}\n",
+            recurring.frequency, recurring.start_date, recurring.description, recurring.next_date,
+        ));
+        for posting in &recurring.postings {
+            text.push_str(&format!("  {}  {:.2}\n", posting.account, posting.amount));
+        }
+    }
     text
 }
 pub fn write_journal(path: String, journal: &Journal) -> io::Result<()> {

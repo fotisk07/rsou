@@ -5,14 +5,18 @@ mod models;
 mod output;
 mod parser;
 mod queries;
+mod recurring;
 mod validation;
 mod write;
 
-use crate::cli::{Cli, Commands};
-use crate::models::{Account, Accounts, Journal, JournalMetadata, Posting, Transaction};
+use crate::cli::{Cli, Commands, RecurCommands};
+use crate::models::{
+    Account, Accounts, Journal, JournalMetadata, Posting, RecurringTransaction, Transaction,
+};
 use crate::parser::parse_journal;
 use crate::validation::{
-    validate_account_path, validate_journal, validate_metadata, validate_transaction,
+    validate_account_path, validate_journal, validate_metadata, validate_recurring,
+    validate_transaction,
 };
 use clap::{CommandFactory, Parser};
 use jiff::Zoned;
@@ -50,6 +54,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             accounts: Accounts::new(),
             aliases: Vec::new(),
             transactions: Vec::new(),
+            recurring_transactions: Vec::new(),
         };
         write::create_journal(cli.journal_path.clone(), &journal).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
@@ -96,16 +101,35 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
         Commands::Pnl {
             period,
             shortcuts,
+            by_month,
+            by_quarter,
             depth,
         } => {
             let range = period
                 .request(shortcuts.selection())
                 .resolve(journal.metadata.year, Zoned::now().date())?;
-            Ok(Some(output::format_pnl(
-                &queries::pnl(&journal, range),
-                journal.metadata.year,
-                depth,
-            )))
+            let breakdown = if by_month {
+                Some(dates::PeriodBreakdown::Month)
+            } else if by_quarter {
+                Some(dates::PeriodBreakdown::Quarter)
+            } else {
+                None
+            };
+            if let Some(breakdown) = breakdown {
+                let columns = queries::pnl_breakdown(&journal, range, breakdown)?;
+                Ok(Some(output::format_pnl_breakdown(
+                    &columns,
+                    range,
+                    journal.metadata.year,
+                    depth,
+                )))
+            } else {
+                Ok(Some(output::format_pnl(
+                    &queries::pnl(&journal, range),
+                    journal.metadata.year,
+                    depth,
+                )))
+            }
         }
         Commands::Bs { date, depth } => {
             let range = date
@@ -132,6 +156,70 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 &report,
                 journal.metadata.year,
             )))
+        }
+        Commands::Recur {
+            command: RecurCommands::List { details },
+        } => Ok(Some(output::format_recurring(
+            &journal.recurring_transactions,
+            details,
+        ))),
+        Commands::Recur {
+            command: RecurCommands::Post { cutoff, dry_run },
+        } => {
+            let through = cutoff
+                .request()
+                .resolve(journal.metadata.year, Zoned::now().date())?
+                .to
+                .ok_or_else(|| "missing posting cutoff".to_string())?;
+            let first = journal.transactions.len();
+            recurring::post_due_transactions(&mut journal, through)?;
+            let transactions = &journal.transactions[first..];
+            if transactions.is_empty() {
+                return Ok(Some("No recurring transactions due.\n".to_string()));
+            }
+            let action = if dry_run { "Would post" } else { "Posted" };
+            let count = transactions.len();
+            let noun = if count == 1 {
+                "transaction"
+            } else {
+                "transactions"
+            };
+            let mut text = format!("{action} {count} recurring {noun}:\n");
+            for transaction in transactions {
+                text.push_str(&format!(
+                    "  {} {}\n",
+                    transaction.date, transaction.description
+                ));
+            }
+            if !dry_run {
+                write::write_journal(cli.journal_path, &journal)
+                    .map_err(|error| format!("failed saving: {error}"))?;
+            }
+            Ok(Some(text))
+        }
+        Commands::Recur {
+            command:
+                RecurCommands::Add {
+                    description,
+                    postings,
+                    start,
+                    frequency,
+                },
+        } => {
+            let start_date = dates::parse_date(journal.metadata.year, &start)?;
+            let recurring = RecurringTransaction {
+                frequency: frequency.frequency(),
+                start_date,
+                next_date: start_date,
+                description,
+                postings: parse_split_postings(postings)?,
+            };
+            validate_recurring(&journal, &recurring)
+                .map_err(|error| format!("invalid recurring template: {error}"))?;
+            journal.recurring_transactions.push(recurring);
+            write::write_journal(cli.journal_path, &journal)
+                .map_err(|error| format!("failed saving: {error}"))?;
+            Ok(None)
         }
         Commands::Post {
             amount,
