@@ -114,11 +114,56 @@ pub struct JournalMetadata {
     pub currency: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RecurrenceFrequency {
+    Daily,
+    Weekly,
+    Biweekly,
+    Monthly,
+}
+
+impl std::fmt::Display for RecurrenceFrequency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Biweekly => "biweekly",
+            Self::Monthly => "monthly",
+        })
+    }
+}
+
+impl std::str::FromStr for RecurrenceFrequency {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "daily" => Ok(Self::Daily),
+            "weekly" => Ok(Self::Weekly),
+            "biweekly" => Ok(Self::Biweekly),
+            "monthly" => Ok(Self::Monthly),
+            _ => Err(format!(
+                "unknown recurrence frequency `{value}`; expected daily, weekly, biweekly, or monthly"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct RecurringTransaction {
+    pub frequency: RecurrenceFrequency,
+    pub start_date: Date,
+    pub next_date: Date,
+    pub description: String,
+    pub postings: Vec<Posting>,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Journal {
     pub metadata: JournalMetadata,
     pub accounts: Accounts,
     pub transactions: Vec<Transaction>,
+    pub recurring_transactions: Vec<RecurringTransaction>,
 }
 impl Journal {
     pub fn sort_transactions(&mut self) {

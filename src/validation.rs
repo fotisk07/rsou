@@ -1,4 +1,4 @@
-use crate::models::{Journal, JournalMetadata, Transaction};
+use crate::models::{Journal, JournalMetadata, Posting, RecurringTransaction, Transaction};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
 
@@ -9,6 +9,7 @@ pub enum ValidationError {
     Unbalanced(String),
     NotEnoughPostings,
     InvalidDescription,
+    NextDateBeforeStart,
     TooManyDecimalPlaces(String),
     DateOutsideJournalYear { date: Date, year: i32 },
 }
@@ -18,6 +19,9 @@ impl std::fmt::Display for ValidationError {
         match self {
             Self::DateOutsideJournalYear { date, year } => {
                 write!(f, "transaction date {date} is outside journal year {year}")
+            }
+            Self::NextDateBeforeStart => {
+                write!(f, "recurring next date cannot precede its start date")
             }
             Self::UnknownAccount(account) => write!(f, "unknown account `{account}`"),
             Self::InvalidAccountName(name) => write!(
@@ -51,14 +55,38 @@ pub fn validate_transaction(
             year: journal.metadata.year,
         });
     }
-    if transaction.description.trim().is_empty() || transaction.description.contains(['\n', '\r']) {
+    validate_postings(journal, &transaction.description, &transaction.postings)
+}
+
+pub fn validate_recurring(
+    journal: &Journal,
+    recurring: &RecurringTransaction,
+) -> Result<(), ValidationError> {
+    if i32::from(recurring.start_date.year()) != journal.metadata.year {
+        return Err(ValidationError::DateOutsideJournalYear {
+            date: recurring.start_date,
+            year: journal.metadata.year,
+        });
+    }
+    if recurring.next_date < recurring.start_date {
+        return Err(ValidationError::NextDateBeforeStart);
+    }
+    validate_postings(journal, &recurring.description, &recurring.postings)
+}
+
+fn validate_postings(
+    journal: &Journal,
+    description: &str,
+    postings: &[Posting],
+) -> Result<(), ValidationError> {
+    if description.trim().is_empty() || description.contains(['\n', '\r']) {
         return Err(ValidationError::InvalidDescription);
     }
     let mut balance = Decimal::ZERO;
-    if transaction.postings.len() < 2 {
+    if postings.len() < 2 {
         return Err(ValidationError::NotEnoughPostings);
     }
-    for posting in &transaction.postings {
+    for posting in postings {
         if posting.amount.normalize().scale() > 2 {
             return Err(ValidationError::TooManyDecimalPlaces(
                 posting.account.clone(),
@@ -70,7 +98,7 @@ pub fn validate_transaction(
         balance += posting.amount;
     }
     if balance != Decimal::ZERO {
-        return Err(ValidationError::Unbalanced(transaction.description.clone()));
+        return Err(ValidationError::Unbalanced(description.to_string()));
     }
     Ok(())
 }
@@ -133,6 +161,9 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
 
     for transaction in &journal.transactions {
         validate_transaction(journal, transaction)?;
+    }
+    for recurring in &journal.recurring_transactions {
+        validate_recurring(journal, recurring)?;
     }
     Ok(())
 }

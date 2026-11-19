@@ -1,6 +1,7 @@
 use crate::{
     completion,
     dates::{DateRequest, PeriodShortcut},
+    models::RecurrenceFrequency,
 };
 use clap::{Args, Parser, Subcommand};
 use clap_complete::ArgValueCompleter;
@@ -90,6 +91,11 @@ pub(crate) enum Commands {
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
     },
+    /// Manage recurring transaction templates.
+    Recur {
+        #[command(subcommand)]
+        command: RecurCommands,
+    },
     /// Record a transaction.
     #[command(display_order = 8)]
     Post {
@@ -124,6 +130,57 @@ pub(crate) enum Commands {
         #[arg(short, long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
         date: String,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RecurCommands {
+    /// Add a balanced recurring template; does not post transactions.
+    #[command(
+        after_help = "Example: sou recur add Rent Assets/Bank -800 Expenses/Rent 800 --start 01-01\nDefault frequency: monthly."
+    )]
+    Add {
+        /// Description; quote if it contains spaces.
+        description: String,
+        /// Alternating account paths and signed amounts, which must sum to zero.
+        #[arg(required = true, num_args = 1.., value_name = "ACCOUNT_AMOUNT", allow_negative_numbers = true)]
+        postings: Vec<String>,
+        /// First occurrence in the journal year (defaults to today's day and month).
+        #[arg(long, value_name = "DD-MM", default_value_t = Zoned::now().date().strftime("%d-%m").to_string())]
+        start: String,
+        #[command(flatten)]
+        frequency: RecurrenceArgs,
+    },
+}
+
+#[derive(Args)]
+#[group(multiple = false)]
+pub(crate) struct RecurrenceArgs {
+    /// Repeat every day.
+    #[arg(long)]
+    day: bool,
+    /// Repeat every week, anchored to the start date.
+    #[arg(long)]
+    week: bool,
+    /// Repeat every two weeks, not twice a month.
+    #[arg(long)]
+    biweekly: bool,
+    /// Repeat every month (default), anchored to the start date.
+    #[arg(long)]
+    month: bool,
+}
+
+impl RecurrenceArgs {
+    pub(crate) fn frequency(&self) -> RecurrenceFrequency {
+        if self.day {
+            RecurrenceFrequency::Daily
+        } else if self.week {
+            RecurrenceFrequency::Weekly
+        } else if self.biweekly {
+            RecurrenceFrequency::Biweekly
+        } else {
+            RecurrenceFrequency::Monthly
+        }
+    }
 }
 
 #[derive(Args)]

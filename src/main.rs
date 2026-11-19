@@ -8,11 +8,14 @@ mod queries;
 mod validation;
 mod write;
 
-use crate::cli::{Cli, Commands};
-use crate::models::{Account, Accounts, Journal, JournalMetadata, Posting, Transaction};
+use crate::cli::{Cli, Commands, RecurCommands};
+use crate::models::{
+    Account, Accounts, Journal, JournalMetadata, Posting, RecurringTransaction, Transaction,
+};
 use crate::parser::parse_journal;
 use crate::validation::{
-    validate_account_path, validate_journal, validate_metadata, validate_transaction,
+    validate_account_path, validate_journal, validate_metadata, validate_recurring,
+    validate_transaction,
 };
 use clap::{CommandFactory, Parser};
 use jiff::Zoned;
@@ -49,6 +52,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             metadata,
             accounts: Accounts::new(),
             transactions: Vec::new(),
+            recurring_transactions: Vec::new(),
         };
         write::create_journal(cli.journal_path.clone(), &journal).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
@@ -131,6 +135,30 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 &report,
                 journal.metadata.year,
             )))
+        }
+        Commands::Recur {
+            command:
+                RecurCommands::Add {
+                    description,
+                    postings,
+                    start,
+                    frequency,
+                },
+        } => {
+            let start_date = dates::parse_date(journal.metadata.year, &start)?;
+            let recurring = RecurringTransaction {
+                frequency: frequency.frequency(),
+                start_date,
+                next_date: start_date,
+                description,
+                postings: parse_split_postings(postings)?,
+            };
+            validate_recurring(&journal, &recurring)
+                .map_err(|error| format!("invalid recurring template: {error}"))?;
+            journal.recurring_transactions.push(recurring);
+            write::write_journal(cli.journal_path, &journal)
+                .map_err(|error| format!("failed saving: {error}"))?;
+            Ok(None)
         }
         Commands::Post {
             amount,
