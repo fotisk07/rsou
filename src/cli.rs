@@ -134,6 +134,14 @@ pub(crate) enum Commands {
 
 #[derive(Subcommand)]
 pub(crate) enum RecurCommands {
+    /// Catch up recurring transactions through today by default.
+    Post {
+        #[command(flatten)]
+        cutoff: RecurringPostDates,
+        /// Show transactions without saving or advancing next dates.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Add a balanced recurring template; does not post transactions.
     #[command(
         after_help = "Example: sou recur add Rent Assets/Bank -800 Expenses/Rent 800 --start 01-01\nDefault frequency: monthly."
@@ -150,6 +158,38 @@ pub(crate) enum RecurCommands {
         #[command(flatten)]
         frequency: RecurrenceArgs,
     },
+}
+
+#[derive(Args)]
+#[group(multiple = false)]
+pub(crate) struct RecurringPostDates {
+    /// Catch up through Sunday, capped at journal year-end (current year only).
+    #[arg(long)]
+    week: bool,
+    /// Catch up through this month-end (current year only).
+    #[arg(long)]
+    month: bool,
+    /// Catch up through this date, inclusive (journal year).
+    #[arg(short, long, value_name = "DD-MM")]
+    date: Option<String>,
+}
+
+impl RecurringPostDates {
+    pub(crate) fn request(&self) -> DateRequest<'_> {
+        DateRequest {
+            to: self.date.as_deref(),
+            shortcut: if self.date.is_some() {
+                None
+            } else if self.week {
+                Some(PeriodShortcut::WeekEnd)
+            } else if self.month {
+                Some(PeriodShortcut::MonthEnd)
+            } else {
+                Some(PeriodShortcut::Today)
+            },
+            ..DateRequest::default()
+        }
+    }
 }
 
 #[derive(Args)]

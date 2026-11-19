@@ -1,5 +1,5 @@
 use crate::models::{Journal, Transaction};
-use jiff::civil::Date;
+use jiff::{Span, civil::Date};
 
 #[derive(Clone, Copy, Default)]
 pub struct DateRange {
@@ -71,6 +71,8 @@ pub enum PeriodShortcut {
     YearToDate,
     LastMonth,
     Today,
+    WeekEnd,
+    MonthEnd,
 }
 
 impl PeriodShortcut {
@@ -97,6 +99,25 @@ impl PeriodShortcut {
             Self::MonthToDate => (current_month, current_month),
             Self::QuarterToDate => (quarter_start(current_month), current_month),
             Self::YearToDate => (1, current_month),
+            Self::WeekEnd => {
+                let year_end =
+                    Date::new(today.year(), 12, 31).map_err(|error| error.to_string())?;
+                let days = i64::from(6 - today.weekday().to_monday_zero_offset());
+                let to = today
+                    .checked_add(Span::new().days(days))
+                    .map(|date| date.min(year_end))
+                    .unwrap_or(year_end);
+                return Ok(DateRange {
+                    from: None,
+                    to: Some(to),
+                });
+            }
+            Self::MonthEnd => {
+                return Ok(DateRange {
+                    from: None,
+                    to: Some(today.last_of_month()),
+                });
+            }
             Self::Today => {
                 return Ok(DateRange {
                     from: None,

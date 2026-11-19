@@ -5,6 +5,7 @@ mod models;
 mod output;
 mod parser;
 mod queries;
+mod recurring;
 mod validation;
 mod write;
 
@@ -135,6 +136,40 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 &report,
                 journal.metadata.year,
             )))
+        }
+        Commands::Recur {
+            command: RecurCommands::Post { cutoff, dry_run },
+        } => {
+            let through = cutoff
+                .request()
+                .resolve(journal.metadata.year, Zoned::now().date())?
+                .to
+                .ok_or_else(|| "missing posting cutoff".to_string())?;
+            let first = journal.transactions.len();
+            recurring::post_due_transactions(&mut journal, through)?;
+            let transactions = &journal.transactions[first..];
+            if transactions.is_empty() {
+                return Ok(Some("No recurring transactions due.\n".to_string()));
+            }
+            let action = if dry_run { "Would post" } else { "Posted" };
+            let count = transactions.len();
+            let noun = if count == 1 {
+                "transaction"
+            } else {
+                "transactions"
+            };
+            let mut text = format!("{action} {count} recurring {noun}:\n");
+            for transaction in transactions {
+                text.push_str(&format!(
+                    "  {} {}\n",
+                    transaction.date, transaction.description
+                ));
+            }
+            if !dry_run {
+                write::write_journal(cli.journal_path, &journal)
+                    .map_err(|error| format!("failed saving: {error}"))?;
+            }
+            Ok(Some(text))
         }
         Commands::Recur {
             command:

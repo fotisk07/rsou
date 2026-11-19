@@ -85,7 +85,7 @@ pub struct Account {
     pub children: Vec<Account>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Posting {
     pub account: String,
     pub amount: Decimal,
