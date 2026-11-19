@@ -1,4 +1,5 @@
 use crate::dates::DateRange;
+use crate::models::RecurringTransaction;
 use crate::queries::{BsReport, LedgerReport, PnlReport};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -6,6 +7,49 @@ use tabled::{
     builder::Builder,
     settings::{Alignment, Modify, Style, object::Columns, style::HorizontalLine},
 };
+
+pub fn format_recurring(templates: &[RecurringTransaction], details: bool) -> String {
+    if templates.is_empty() {
+        return "No recurring transactions.\n".to_string();
+    }
+    if details {
+        let mut text = String::new();
+        for (index, template) in templates.iter().enumerate() {
+            if index > 0 {
+                text.push('\n');
+            }
+            text.push_str(&format!(
+                "{} · {} · next: {}\n  Start: {}\n",
+                template.description, template.frequency, template.next_date, template.start_date,
+            ));
+            let mut builder = Builder::default();
+            for posting in &template.postings {
+                builder.push_record([
+                    format!(" {}", posting.account),
+                    format_report_amount(posting.amount),
+                ]);
+            }
+            let mut table = builder.build();
+            table.with(Style::blank());
+            table.with(Modify::new(Columns::new(1..2)).with(Alignment::right()));
+            text.push_str(&format!("{table}\n"));
+        }
+        return text;
+    }
+
+    let mut builder = Builder::default();
+    builder.push_record(["Description", "Frequency", "Next"]);
+    for template in templates {
+        builder.push_record([
+            template.description.clone(),
+            template.frequency.to_string(),
+            template.next_date.to_string(),
+        ]);
+    }
+    let mut table = builder.build();
+    table.with(Style::blank().horizontals([(1, HorizontalLine::new('─').intersection('─'))]));
+    format!("{table}\n")
+}
 
 pub fn format_ledger(account: &str, report: &LedgerReport, year: i32) -> String {
     let heading = format!("Ledger | {account} | {}", format_period(report.range, year));

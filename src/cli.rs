@@ -134,6 +134,12 @@ pub(crate) enum Commands {
 
 #[derive(Subcommand)]
 pub(crate) enum RecurCommands {
+    /// List recurring templates and their next dates.
+    List {
+        /// Include start dates and posting splits.
+        #[arg(long)]
+        details: bool,
+    },
     /// Catch up recurring transactions through today by default.
     Post {
         #[command(flatten)]

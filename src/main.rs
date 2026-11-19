@@ -138,6 +138,12 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             )))
         }
         Commands::Recur {
+            command: RecurCommands::List { details },
+        } => Ok(Some(output::format_recurring(
+            &journal.recurring_transactions,
+            details,
+        ))),
+        Commands::Recur {
             command: RecurCommands::Post { cutoff, dry_run },
         } => {
             let through = cutoff
