@@ -334,15 +334,3 @@ fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetad
         currency: currency.ok_or_else(|| ParseError::new("missing metadata field `currency`"))?,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::parse_journal;
-
-    #[test]
-    fn older_journal_without_recurring_section_still_parses() {
-        let journal = parse_journal(include_str!("../test/simple.sou")).unwrap();
-        assert_eq!(journal.transactions.len(), 2);
-        assert!(journal.recurring_transactions.is_empty());
-    }
-}

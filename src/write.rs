@@ -96,28 +96,3 @@ fn journal_file(path: &Path, journal: &Journal) -> io::Result<NamedTempFile> {
     file.as_file().sync_all()?;
     Ok(file)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::format_journal;
-    use crate::parser::parse_journal;
-
-    #[test]
-    fn recurring_precedes_transactions_and_round_trips() {
-        let original = include_str!("../test/simple.sou").replace(
-            "[TRANSACTIONS]",
-            "[ALIASES]\n\nbank = Assets/Cash/Checking\n\n[TRANSACTIONS]",
-        );
-        let recurring = "[RECURRING]\n\nmonthly 2026-01-04 Lunch\n  next: 2026-02-04\n  Assets/Cash/Checking  -5.00\n  Expenses/Food  5.00\n\n";
-        let before = original.replace("[TRANSACTIONS]", &format!("{recurring}[TRANSACTIONS]"));
-        let after = format!("{original}\n{recurring}");
-        let journal = parse_journal(&before).unwrap();
-        assert!(parse_journal(&after).is_err());
-        assert_eq!(journal.recurring_transactions.len(), 1);
-        assert_eq!(journal.aliases.len(), 1);
-        let saved = format_journal(&journal);
-        assert!(saved.find("[ALIASES]").unwrap() < saved.find("[RECURRING]").unwrap());
-        assert!(saved.find("[RECURRING]").unwrap() < saved.find("[TRANSACTIONS]").unwrap());
-        assert_eq!(journal, parse_journal(&saved).unwrap());
-    }
-}

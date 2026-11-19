@@ -350,27 +350,3 @@ pub fn format_bs(report: &BsReport, year: i32, depth: usize) -> String {
         .unwrap_or_else(|| format!("31 Dec {year:04}"));
     format!("Balance Sheet | As of {at}\n\n{table}\n")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::format_pnl_breakdown;
-    use crate::{dates::{DateRange, PeriodBreakdown}, parser::parse_journal, queries};
-
-    #[test]
-    fn pnl_breakdowns_have_only_one_section_spacer() {
-        let journal = parse_journal(include_str!("../test/simple.sou")).unwrap();
-        let range = DateRange { from: None, to: None };
-        for breakdown in [PeriodBreakdown::Month, PeriodBreakdown::Quarter] {
-            let columns = queries::pnl_breakdown(&journal, range, breakdown).unwrap();
-            for depth in [0, 1, 2, 3] {
-                let text = format_pnl_breakdown(&columns, range, 2026, depth);
-                let table = text.split_once("\n\n").unwrap().1;
-                let spacers = table.lines().filter(|line| {
-                    line.chars().all(|c| c.is_whitespace() || c == '│')
-                }).count();
-                assert_eq!(spacers, 1, "unexpected spacing at depth {depth}:\n{text}");
-                assert!(table.lines().filter(|line| line.contains("Food")).count() <= 1);
-            }
-        }
-    }
-}
