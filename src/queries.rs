@@ -1,4 +1,4 @@
-use crate::dates::DateRange;
+use crate::dates::{DateRange, PeriodBreakdown};
 use crate::models::{Account, Journal, Transaction};
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -77,6 +77,26 @@ pub struct PnlReport {
 
 /// Summarize income and expenses within an inclusive date range without journal mutation.
 pub fn pnl(journal: &Journal, range: DateRange) -> PnlReport {
+    pnl_report(journal, range, false)
+}
+
+/// Keep an identical account tree in every column, including accounts whose
+/// amounts cancel across periods. The formatter hides rows empty in all columns.
+pub fn pnl_breakdown(
+    journal: &Journal,
+    range: DateRange,
+    breakdown: PeriodBreakdown,
+) -> Result<Vec<(String, PnlReport)>, String> {
+    let mut columns: Vec<_> = breakdown
+        .periods(range, journal.metadata.year)?
+        .into_iter()
+        .map(|(label, period)| (label, pnl_report(journal, period, true)))
+        .collect();
+    columns.push(("Total".to_string(), pnl_report(journal, range, true)));
+    Ok(columns)
+}
+
+fn pnl_report(journal: &Journal, range: DateRange, keep_zero: bool) -> PnlReport {
     let mut balances = HashMap::new();
     for transaction in range.transactions(journal) {
         for posting in &transaction.postings {
@@ -93,7 +113,7 @@ pub fn pnl(journal: &Journal, range: DateRange) -> PnlReport {
             .accounts
             .find_account(root)
             .expect("built-in root account");
-        let (total, mut section) = pnl_account(account, root, 0, &balances);
+        let (total, mut section) = pnl_account(account, root, 0, &balances, keep_zero);
         // Both income credits and expense debits reduce the raw accounting result.
         net_result -= total;
         if root == "Income" {
@@ -117,19 +137,21 @@ fn pnl_account(
     path: &str,
     depth: usize,
     balances: &HashMap<&str, Decimal>,
+    keep_zero: bool,
 ) -> (Decimal, Vec<PnlRow>) {
     let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
     let mut descendants = Vec::new();
     for child in &account.children {
         let child_path = format!("{path}/{}", child.name);
-        let (child_total, child_rows) = pnl_account(child, &child_path, depth + 1, balances);
+        let (child_total, child_rows) =
+            pnl_account(child, &child_path, depth + 1, balances, keep_zero);
         total += child_total;
         descendants.extend(child_rows);
     }
 
     let mut rows = Vec::new();
-    // Keep section boundaries even when a root totals zero; hide zero detail rows.
-    if depth == 0 || !total.is_zero() {
+    // Breakdown columns need the complete tree so their rows stay aligned.
+    if keep_zero || depth == 0 || !total.is_zero() {
         rows.push(PnlRow {
             account: account.name.clone(),
             depth,

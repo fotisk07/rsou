@@ -51,6 +51,12 @@ pub(crate) enum Commands {
         period: PeriodArgs,
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
+        /// Break the selected period into monthly columns.
+        #[arg(long, conflicts_with = "by_quarter")]
+        by_month: bool,
+        /// Break the selected period into quarterly columns.
+        #[arg(long)]
+        by_quarter: bool,
         /// Account levels; 0 = totals only.
         #[arg(long, default_value_t = 1)]
         depth: usize,

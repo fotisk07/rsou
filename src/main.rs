@@ -100,16 +100,35 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
         Commands::Pnl {
             period,
             shortcuts,
+            by_month,
+            by_quarter,
             depth,
         } => {
             let range = period
                 .request(shortcuts.selection())
                 .resolve(journal.metadata.year, Zoned::now().date())?;
-            Ok(Some(output::format_pnl(
-                &queries::pnl(&journal, range),
-                journal.metadata.year,
-                depth,
-            )))
+            let breakdown = if by_month {
+                Some(dates::PeriodBreakdown::Month)
+            } else if by_quarter {
+                Some(dates::PeriodBreakdown::Quarter)
+            } else {
+                None
+            };
+            if let Some(breakdown) = breakdown {
+                let columns = queries::pnl_breakdown(&journal, range, breakdown)?;
+                Ok(Some(output::format_pnl_breakdown(
+                    &columns,
+                    range,
+                    journal.metadata.year,
+                    depth,
+                )))
+            } else {
+                Ok(Some(output::format_pnl(
+                    &queries::pnl(&journal, range),
+                    journal.metadata.year,
+                    depth,
+                )))
+            }
         }
         Commands::Bs { date, depth } => {
             let range = date

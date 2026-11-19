@@ -5,7 +5,11 @@ use jiff::civil::Date;
 use rust_decimal::Decimal;
 use tabled::{
     builder::Builder,
-    settings::{Alignment, Modify, Style, object::Columns, style::HorizontalLine},
+    settings::{
+        Alignment, Highlight, Modify, Style,
+        object::Columns,
+        style::{Border, HorizontalLine},
+    },
 };
 
 pub fn format_recurring(templates: &[RecurringTransaction], details: bool) -> String {
@@ -150,6 +154,111 @@ pub fn format_pnl(report: &PnlReport, year: i32, depth: usize) -> String {
     format!(
         "Profit and Loss | {}\n\n{table}\n",
         format_period(report.range, year)
+    )
+}
+
+pub fn format_pnl_breakdown(
+    columns: &[(String, PnlReport)],
+    range: DateRange,
+    year: i32,
+    depth: usize,
+) -> String {
+    let mut builder = Builder::default();
+    let mut header = vec!["Account".to_string()];
+    header.extend(columns.iter().map(|(label, _)| label.clone()));
+    builder.push_record(header);
+
+    // Every column has the same full account tree. Keep parents visible when
+    // children have activity, even if the parent's amounts cancel to zero.
+    let rows = &columns[0].1.rows;
+    let mut visible: Vec<bool> = (0..rows.len())
+        .map(|index| {
+            rows[index].depth == 0
+                || columns.iter().any(|(_, report)| {
+                    !report.rows[index].amount.is_zero() || !report.rows[index].direct.is_zero()
+                })
+        })
+        .collect();
+    let mut parents: Vec<usize> = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        parents.truncate(row.depth);
+        if visible[index] {
+            for &parent in &parents {
+                visible[parent] = true;
+            }
+        }
+        parents.push(index);
+    }
+    let mut root = 0;
+    for (index, row) in rows.iter().enumerate() {
+        if row.depth == 0 {
+            root = index;
+            if index > 0 {
+                builder.push_record(vec![String::new(); columns.len() + 1]);
+            }
+            if depth > 0 {
+                let mut heading = vec![String::new(); columns.len() + 1];
+                heading[0] = row.account.to_uppercase();
+                builder.push_record(heading);
+            }
+        } else if visible[index] && row.depth <= depth {
+            let mut values = vec![format!("{}{}", "  ".repeat(row.depth), row.account)];
+            values.extend(
+                columns
+                    .iter()
+                    .map(|(_, report)| format_report_amount(report.rows[index].amount)),
+            );
+            builder.push_record(values);
+            let expanded = rows[index + 1..]
+                .iter()
+                .enumerate()
+                .take_while(|(_, child)| child.depth > row.depth)
+                .any(|(offset, child)| visible[index + 1 + offset] && child.depth <= depth);
+            if expanded
+                && columns
+                    .iter()
+                    .any(|(_, report)| !report.rows[index].direct.is_zero())
+            {
+                let mut values = vec![format!("{}(direct)", "  ".repeat(row.depth + 1))];
+                values.extend(
+                    columns
+                        .iter()
+                        .map(|(_, report)| format_report_amount(report.rows[index].direct)),
+                );
+                builder.push_record(values);
+            }
+        }
+        if rows.get(index + 1).is_none_or(|next| next.depth == 0) {
+            let mut values = vec![format!("Total {}", rows[root].account)];
+            values.extend(
+                columns
+                    .iter()
+                    .map(|(_, report)| format_report_amount(report.rows[root].amount)),
+            );
+            builder.push_record(values);
+        }
+    }
+    let result_row = builder.count_records();
+    let mut values = vec!["Net Result".to_string()];
+    values.extend(
+        columns
+            .iter()
+            .map(|(_, report)| format_report_amount(report.net_result)),
+    );
+    builder.push_record(values);
+    let mut table = builder.build();
+    table.with(Style::blank().horizontals([
+        (1, HorizontalLine::new('─').intersection('─')),
+        (result_row, HorizontalLine::new('─').intersection('─')),
+    ]));
+    table.with(Modify::new(Columns::new(1..columns.len() + 1)).with(Alignment::right()));
+    table.with(
+        Highlight::new(Columns::new(columns.len()..columns.len() + 1))
+            .border(Border::new().left('│')),
+    );
+    format!(
+        "Profit and Loss | {}\n\n{table}\n",
+        format_period(range, year)
     )
 }
 

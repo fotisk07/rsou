@@ -7,6 +7,50 @@ pub struct DateRange {
     pub to: Option<Date>,
 }
 
+#[derive(Clone, Copy)]
+pub enum PeriodBreakdown {
+    Month,
+    Quarter,
+}
+
+impl PeriodBreakdown {
+    /// Split the selected range at calendar boundaries, clipping partial periods.
+    pub fn periods(self, range: DateRange, year: i32) -> Result<Vec<(String, DateRange)>, String> {
+        let year = i16::try_from(year).map_err(|_| format!("invalid journal year {year}"))?;
+        let from = range
+            .from
+            .unwrap_or(Date::new(year, 1, 1).map_err(|e| e.to_string())?);
+        let to = range
+            .to
+            .unwrap_or(Date::new(year, 12, 31).map_err(|e| e.to_string())?);
+        let width = match self {
+            Self::Month => 1,
+            Self::Quarter => 3,
+        };
+        let first_month = ((from.month() - 1) / width) * width + 1;
+        let mut periods = Vec::new();
+        for month in (first_month..=to.month()).step_by(width as usize) {
+            let start = Date::new(year, month, 1).map_err(|e| e.to_string())?;
+            let end = Date::new(year, month + width - 1, 1)
+                .map_err(|e| e.to_string())?
+                .last_of_month();
+            let clipped = DateRange {
+                from: Some(start.max(from)),
+                to: Some(end.min(to)),
+            };
+            let mut label = match self {
+                Self::Month => start.strftime("%b").to_string(),
+                Self::Quarter => format!("Q{}", (month - 1) / 3 + 1),
+            };
+            if from > start || to < end {
+                label.push_str(" (partial)");
+            }
+            periods.push((label, clipped));
+        }
+        Ok(periods)
+    }
+}
+
 /// An unresolved date selection, independent of CLI parsing.
 #[derive(Default)]
 pub struct DateRequest<'a> {
