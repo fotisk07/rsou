@@ -2,6 +2,7 @@ use crate::{
     completion,
     dates::{DateRequest, PeriodShortcut},
     models::RecurrenceFrequency,
+    output::ReportFormat,
 };
 use clap::{Args, Parser, Subcommand};
 use clap_complete::ArgValueCompleter;
@@ -24,14 +25,6 @@ pub(crate) struct Cli {
 
     #[command(subcommand)]
     pub(crate) command: Commands,
-}
-
-#[derive(Clone, Copy, clap::ValueEnum, Default)]
-pub(crate) enum ReportFormat {
-    #[default]
-    Text,
-    Xlsx,
-    Csv,
 }
 
 #[derive(Subcommand)]
@@ -86,6 +79,9 @@ pub(crate) enum Commands {
     Bs {
         #[command(flatten)]
         date: CutoffArgs,
+        /// Output format; redirect xlsx output to a file.
+        #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
+        format: ReportFormat,
         /// Account levels; 0 = totals only.
         #[arg(long, default_value_t = 1, display_order = 52)]
         depth: usize,

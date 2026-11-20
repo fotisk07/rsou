@@ -1,6 +1,5 @@
 mod cli;
 mod completion;
-mod csv_export;
 mod dates;
 mod models;
 mod output;
@@ -9,9 +8,8 @@ mod queries;
 mod recurring;
 mod validation;
 mod write;
-mod xlsx;
 
-use crate::cli::{Cli, Commands, RecurCommands, ReportFormat};
+use crate::cli::{Cli, Commands, RecurCommands};
 use crate::models::{
     Account, Accounts, Journal, JournalMetadata, Posting, RecurringTransaction, Transaction,
 };
@@ -118,57 +116,27 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             } else {
                 None
             };
-            if !matches!(format, ReportFormat::Text) {
-                use std::io::{IsTerminal, Write};
-                if matches!(format, ReportFormat::Xlsx) && std::io::stdout().is_terminal() {
-                    return Err(
-                        "redirect XLSX output to a file, e.g. sou pnl --format xlsx > pnl.xlsx"
-                            .to_string(),
-                    );
-                }
-                let columns = if let Some(breakdown) = breakdown {
-                    queries::pnl_breakdown(&journal, range, breakdown)?
-                } else {
-                    vec![("Amount".to_string(), queries::pnl(&journal, range))]
-                };
-                if matches!(format, ReportFormat::Csv) {
-                    return csv_export::pnl(&columns, depth)
-                        .map(Some)
-                        .map_err(|error| format!("failed exporting P&L: {error}"));
-                }
-                let bytes = xlsx::pnl(&columns, &journal.metadata, range, depth)
-                    .map_err(|error| format!("failed exporting P&L: {error}"))?;
-                std::io::stdout()
-                    .lock()
-                    .write_all(&bytes)
-                    .map_err(|error| format!("failed writing XLSX: {error}"))?;
-                return Ok(None);
-            }
-            if let Some(breakdown) = breakdown {
-                let columns = queries::pnl_breakdown(&journal, range, breakdown)?;
-                Ok(Some(output::format_pnl_breakdown(
-                    &columns,
-                    range,
-                    journal.metadata.year,
-                    depth,
-                )))
+            let columns = if let Some(breakdown) = breakdown {
+                queries::pnl_breakdown(&journal, range, breakdown)?
             } else {
-                Ok(Some(output::format_pnl(
-                    &queries::pnl(&journal, range),
-                    journal.metadata.year,
-                    depth,
-                )))
-            }
+                vec![("Amount".to_string(), queries::pnl(&journal, range))]
+            };
+            output::pnl(&columns, &journal.metadata, depth, format)
         }
-        Commands::Bs { date, depth } => {
+        Commands::Bs {
+            date,
+            depth,
+            format,
+        } => {
             let range = date
                 .request(None)
                 .resolve(journal.metadata.year, Zoned::now().date())?;
-            Ok(Some(output::format_bs(
+            output::bs(
                 &queries::bs(&journal, range),
-                journal.metadata.year,
+                &journal.metadata,
                 depth,
-            )))
+                format,
+            )
         }
         Commands::Ledger {
             account,

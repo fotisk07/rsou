@@ -59,11 +59,12 @@ sou bs --to 30-06
 
 Dates are `DD-MM`, in the journal year. Use `sou <command> --help` for the rest.
 
-Export P&L reports to an Excel/LibreOffice workbook, preserving account indentation and numeric amounts:
+Export P&L and balance sheet reports to an Excel/LibreOffice workbook, preserving account indentation and numeric amounts:
 
 ```sh
 sou pnl --year --depth 2 --format xlsx > pnl.xlsx
 sou pnl --year --by-month --depth 2 --format xlsx > monthly.xlsx
+sou bs --to 31-12 --depth 2 --format xlsx > bs.xlsx
 ```
 
 The same date filters and account depth apply. Bold parent rows are subtotals, not additional amounts to sum.
@@ -73,6 +74,7 @@ For plain CSV data instead:
 ```sh
 sou pnl --year --depth 2 --format csv > pnl.csv
 sou pnl --year --by-month --depth 2 --format csv > monthly.csv
+sou bs --to 31-12 --depth 2 --format csv > bs.csv
 ```
 
 CSV includes full account paths, depth, and row type (`account`, `subtotal`, `direct`, or `result`). Subtotals include their children; do not sum all rows together. Amounts are plain decimals without thousands separators.

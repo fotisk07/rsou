@@ -150,8 +150,9 @@ fn pnl_account(
     }
 
     let mut rows = Vec::new();
+    // Keep ancestors of active children even when their amounts cancel out.
     // Breakdown columns need the complete tree so their rows stay aligned.
-    if keep_zero || depth == 0 || !total.is_zero() {
+    if keep_zero || depth == 0 || !total.is_zero() || !descendants.is_empty() {
         rows.push(PnlRow {
             account: account.name.clone(),
             depth,
@@ -239,8 +240,8 @@ fn bs_account(
     }
 
     let mut rows = Vec::new();
-    // Keep section boundaries even when a root totals zero; hide zero detail rows.
-    if depth == 0 || !total.is_zero() {
+    // Preserve section boundaries and ancestors of active children.
+    if depth == 0 || !total.is_zero() || !descendants.is_empty() {
         rows.push(BsRow {
             account: account.name.clone(),
             depth,
@@ -354,6 +355,35 @@ mod tests {
         assert_eq!(row("Expenses").direct, Decimal::new(1005, 2));
         assert_eq!(row("Food").amount, Decimal::new(2510, 2));
         assert_eq!(report.net_result, Decimal::new(8520, 2));
+    }
+
+    #[test]
+    fn zero_total_parent_is_kept_when_direct_and_child_balances_cancel() {
+        let journal =
+            journal("2024-02-01 Internal transfer\n  Assets/Bank -10\n  Assets/Bank/Checking 10\n");
+        let report = bs(
+            &journal,
+            DateRange {
+                from: None,
+                to: None,
+            },
+        );
+        let bank = report
+            .rows
+            .iter()
+            .find(|row| row.account == "Bank")
+            .unwrap();
+        assert_eq!(bank.amount, Decimal::ZERO);
+        assert_eq!(bank.direct, Decimal::from(-10));
+        assert_eq!(
+            report
+                .rows
+                .iter()
+                .find(|row| row.account == "Checking")
+                .unwrap()
+                .amount,
+            Decimal::from(10)
+        );
     }
 
     #[test]
