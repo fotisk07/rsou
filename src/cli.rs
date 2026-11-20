@@ -13,7 +13,13 @@ use rust_decimal::Decimal;
 #[command(about = "Personal accounting CLI", version)]
 pub(crate) struct Cli {
     /// Journal file.
-    #[arg(short = 'j', long, global = true, default_value = "journal.sou", display_order = 100)]
+    #[arg(
+        short = 'j',
+        long,
+        global = true,
+        default_value = "journal.sou",
+        display_order = 100
+    )]
     pub(crate) journal_path: String,
 
     #[command(subcommand)]
@@ -234,7 +240,9 @@ impl CutoffArgs {
             shortcut: self
                 .month
                 .map(|month| month.map_or(PeriodShortcut::CurrentMonth, PeriodShortcut::Month))
-                .or(self.quarter.map(|quarter| quarter.map_or(PeriodShortcut::CurrentQuarter, PeriodShortcut::Quarter)))
+                .or(self.quarter.map(|quarter| {
+                    quarter.map_or(PeriodShortcut::CurrentQuarter, PeriodShortcut::Quarter)
+                }))
                 .or(self.week.then_some(PeriodShortcut::WeekEnd))
                 .or(self.today.then_some(PeriodShortcut::Today))
                 .or(self.year.then_some(PeriodShortcut::Year))

@@ -251,3 +251,160 @@ fn bs_account(
     rows.extend(descendants);
     (total, rows)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{parser::parse_journal, validation::validate_journal};
+
+    fn journal(transactions: &str) -> Journal {
+        let journal = parse_journal(&format!(
+            "[JOURNAL]\nname: Tests\nyear: 2024\ncurrency: EUR\n\
+             [ACCOUNTS]\nAssets\n  Bank\n    Checking\n  BankOther\n\
+             Liabilities\n  Loan\nEquity\n  Capital\nIncome\n  Sales\n\
+             Expenses\n  Food\n[TRANSACTIONS]\n{transactions}"
+        ))
+        .unwrap();
+        validate_journal(&journal).unwrap();
+        journal
+    }
+
+    #[test]
+    fn opening_and_running_balances_include_descendants_but_not_similar_names() {
+        let journal = journal(
+            "2024-03-01 After cutoff
+  Assets/Bank 900
+  Equity -900
+2024-02-29 Closing boundary
+  Assets/Bank/Checking -25.25
+  Equity 25.25
+2024-01-31 Opening
+  Assets/Bank/Checking 100.10
+  Equity -100.10
+2024-02-01 Starting boundary
+  Assets/Bank 10.05
+  Assets/Bank/Checking 2.10
+  Equity -12.15
+2024-01-01 Unrelated opening
+  Assets/BankOther 500
+  Equity -500
+2024-02-15 Unrelated movement
+  Assets/BankOther 700
+  Equity -700
+",
+        );
+        let report = ledger(
+            &journal,
+            "Assets/Bank",
+            DateRange {
+                from: Some("2024-02-01".parse().unwrap()),
+                to: Some("2024-02-29".parse().unwrap()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(report.opening, Decimal::new(10010, 2));
+        let amounts: Vec<_> = report
+            .entries
+            .iter()
+            .map(|e| (e.amount, e.balance))
+            .collect();
+        assert_eq!(
+            amounts,
+            vec![
+                (Decimal::new(1005, 2), Decimal::new(11015, 2)),
+                (Decimal::new(210, 2), Decimal::new(11225, 2)),
+                (Decimal::new(-2525, 2), Decimal::new(8700, 2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn period_profit_rolls_up_direct_and_child_postings_with_income_credit_signs() {
+        let journal = journal(
+            "2024-01-31 Prior income
+  Income -1000
+  Assets 1000
+2024-02-01 Income
+  Income -20.10
+  Income/Sales -100.25
+  Assets 120.35
+2024-02-29 Expense and refund
+  Expenses 10.05
+  Expenses/Food 30.20
+  Expenses/Food -5.10
+  Assets -35.15
+2024-03-01 Later expense
+  Expenses 500
+  Assets -500
+",
+        );
+        let report = pnl(
+            &journal,
+            DateRange {
+                from: Some("2024-02-01".parse().unwrap()),
+                to: Some("2024-02-29".parse().unwrap()),
+            },
+        );
+        let row = |name| report.rows.iter().find(|r| r.account == name).unwrap();
+        assert_eq!(row("Income").amount, Decimal::new(12035, 2));
+        assert_eq!(row("Income").direct, Decimal::new(2010, 2));
+        assert_eq!(row("Sales").amount, Decimal::new(10025, 2));
+        assert_eq!(row("Expenses").amount, Decimal::new(3515, 2));
+        assert_eq!(row("Expenses").direct, Decimal::new(1005, 2));
+        assert_eq!(row("Food").amount, Decimal::new(2510, 2));
+        assert_eq!(report.net_result, Decimal::new(8520, 2));
+    }
+
+    #[test]
+    fn cutoff_includes_accumulated_profit_in_equity_and_preserves_accounting_equation() {
+        let journal = journal(
+            "2024-01-01 Capital and borrowing
+  Assets/Bank 1500
+  Equity/Capital -1000
+  Liabilities/Loan -500
+2024-01-15 Prior profit
+  Assets/Bank 200
+  Income -200
+2024-02-29 Current expense
+  Assets/Bank -50
+  Expenses 50
+2024-03-01 Future income
+  Assets/Bank 900
+  Income -900
+",
+        );
+        let report = bs(
+            &journal,
+            DateRange {
+                from: Some("2024-02-01".parse().unwrap()),
+                to: Some("2024-02-29".parse().unwrap()),
+            },
+        );
+        let amount = |name| {
+            report
+                .rows
+                .iter()
+                .find(|r| r.account == name)
+                .unwrap()
+                .amount
+        };
+        assert_eq!(amount("Assets"), Decimal::from(1650));
+        assert_eq!(amount("Liabilities"), Decimal::from(500));
+        assert_eq!(amount("Capital"), Decimal::from(1000));
+        assert_eq!(amount("Net Result"), Decimal::from(150));
+        assert_eq!(amount("Equity"), Decimal::from(1150));
+        assert_eq!(amount("Assets"), amount("Liabilities") + amount("Equity"));
+        // Repeating the report must not accumulate synthetic profit in the journal.
+        let again = bs(&journal, report.range);
+        assert_eq!(
+            again
+                .rows
+                .iter()
+                .find(|r| r.account == "Equity")
+                .unwrap()
+                .amount,
+            amount("Equity")
+        );
+    }
+}

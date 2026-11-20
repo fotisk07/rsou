@@ -65,8 +65,7 @@ pub fn parse_journal(journal_text: &str) -> Result<Journal, ParseError> {
     } else {
         Vec::new()
     };
-    let recurring_line =
-        accounts_line + account_sections.bytes().filter(|&b| b == b'\n').count();
+    let recurring_line = accounts_line + account_sections.bytes().filter(|&b| b == b'\n').count();
     let transactions = parse_transactions(transactions_text, transactions_line)?;
     let recurring_transactions = parse_recurring(recurring_text, recurring_line)?;
     let metadata = parse_metadata(metadata_text, metadata_line)?;

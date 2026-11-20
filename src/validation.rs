@@ -194,3 +194,58 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_journal;
+
+    #[test]
+    fn transactions_require_balanced_postings_to_known_accounts_in_whole_cents() {
+        let journal = parse_journal(
+            "[JOURNAL]\nname: Test\nyear: 2024\ncurrency: EUR\n\
+             [ACCOUNTS]\nAssets\nExpenses\n[TRANSACTIONS]\n",
+        )
+        .unwrap();
+        let mut transaction = Transaction::new(
+            "2024-02-29".parse().unwrap(),
+            "Split purchase".into(),
+            vec![
+                Posting {
+                    account: "Assets".into(),
+                    amount: Decimal::new(-1234, 2),
+                },
+                Posting {
+                    account: "Expenses".into(),
+                    amount: Decimal::new(1000, 2),
+                },
+                Posting {
+                    account: "Expenses".into(),
+                    amount: Decimal::new(234, 2),
+                },
+            ],
+        );
+        assert_eq!(validate_transaction(&journal, &transaction), Ok(()));
+
+        transaction.postings[2].amount = Decimal::new(235, 2);
+        assert!(matches!(
+            validate_transaction(&journal, &transaction),
+            Err(ValidationError::Unbalanced(_))
+        ));
+        transaction.postings[2].amount = Decimal::new(234, 2);
+
+        transaction.postings[2].account = "Expenses/Missing".into();
+        assert!(matches!(
+            validate_transaction(&journal, &transaction),
+            Err(ValidationError::UnknownAccount(_))
+        ));
+        transaction.postings[2].account = "Expenses".into();
+
+        transaction.postings[0].amount = Decimal::new(-12345, 3);
+        transaction.postings[2].amount = Decimal::new(2345, 3);
+        assert!(matches!(
+            validate_transaction(&journal, &transaction),
+            Err(ValidationError::TooManyDecimalPlaces(_))
+        ));
+    }
+}

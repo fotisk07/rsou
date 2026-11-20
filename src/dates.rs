@@ -124,7 +124,9 @@ pub enum PeriodShortcut {
 impl PeriodShortcut {
     /// Resolve calendar shortcuts independently of CLI parsing and the system clock.
     fn resolve(self, year: i32, today: Date) -> Result<DateRange, String> {
-        if !matches!(self, Self::Year | Self::Month(_) | Self::Quarter(_)) && year != i32::from(today.year()) {
+        if !matches!(self, Self::Year | Self::Month(_) | Self::Quarter(_))
+            && year != i32::from(today.year())
+        {
             return Err(format!(
                 "relative date shortcuts require journal year {} (found {year})",
                 today.year()
@@ -147,7 +149,7 @@ impl PeriodShortcut {
             Self::CurrentQuarter => {
                 let first = quarter_start(current_month);
                 (first, first + 2)
-            },
+            }
             Self::QuarterToDate => (quarter_start(current_month), current_month),
             Self::YearToDate => (1, current_month),
             Self::WeekEnd => {
@@ -199,12 +201,19 @@ impl PeriodShortcut {
     }
 }
 
-pub(crate) fn resolve_start_date(year: i32, start: Option<&str>, today: Date) -> Result<Date, String> {
+pub(crate) fn resolve_start_date(
+    year: i32,
+    start: Option<&str>,
+    today: Date,
+) -> Result<Date, String> {
     if let Some(start) = start {
         return parse_date(year, start);
     }
     if year != i32::from(today.year()) {
-        return Err(format!("--start is required for journal year {year}; defaulting to today requires journal year {}", today.year()));
+        return Err(format!(
+            "--start is required for journal year {year}; defaulting to today requires journal year {}",
+            today.year()
+        ));
     }
     Ok(today)
 }
