@@ -151,15 +151,7 @@ fn validate_account_name(name: &str) -> Result<(), ValidationError> {
 }
 
 pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
-    let mut accounts: Vec<_> = ["Assets", "Liabilities", "Equity", "Income", "Expenses"]
-        .iter()
-        .map(|root| {
-            journal
-                .accounts
-                .find_account(root)
-                .expect("built-in root account")
-        })
-        .collect();
+    let mut accounts: Vec<_> = journal.accounts.roots().collect();
     while let Some(account) = accounts.pop() {
         validate_account_name(&account.name)?;
         accounts.extend(&account.children);

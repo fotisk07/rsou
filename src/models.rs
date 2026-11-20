@@ -35,6 +35,17 @@ impl Accounts {
         }
     }
 
+    pub fn roots(&self) -> impl Iterator<Item = &Account> {
+        [
+            &self.assets,
+            &self.liabilities,
+            &self.equity,
+            &self.income,
+            &self.expenses,
+        ]
+        .into_iter()
+    }
+
     pub fn root_mut(&mut self, name: &str) -> Option<&mut Account> {
         match name {
             "Assets" => Some(&mut self.assets),

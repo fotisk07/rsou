@@ -62,7 +62,7 @@ pub fn ledger(journal: &Journal, path: &str, range: DateRange) -> Option<LedgerR
     })
 }
 
-pub struct PnlRow {
+pub struct AccountBalanceRow {
     pub account: String,
     pub depth: usize,
     pub amount: Decimal,
@@ -71,7 +71,7 @@ pub struct PnlRow {
 
 pub struct PnlReport {
     pub range: DateRange,
-    pub rows: Vec<PnlRow>,
+    pub rows: Vec<AccountBalanceRow>,
     pub net_result: Decimal,
 }
 
@@ -97,14 +97,7 @@ pub fn pnl_breakdown(
 }
 
 fn pnl_report(journal: &Journal, range: DateRange, keep_zero: bool) -> PnlReport {
-    let mut balances = HashMap::new();
-    for transaction in range.transactions(journal) {
-        for posting in &transaction.postings {
-            *balances
-                .entry(posting.account.as_str())
-                .or_insert(Decimal::ZERO) += posting.amount;
-        }
-    }
+    let balances = collect_balances(journal, range);
 
     let mut rows = Vec::new();
     let mut net_result = Decimal::ZERO;
@@ -113,7 +106,7 @@ fn pnl_report(journal: &Journal, range: DateRange, keep_zero: bool) -> PnlReport
             .accounts
             .find_account(root)
             .expect("built-in root account");
-        let (total, mut section) = pnl_account(account, root, 0, &balances, keep_zero);
+        let (total, mut section) = account_balances(account, root, 0, &balances, keep_zero);
         // Both income credits and expense debits reduce the raw accounting result.
         net_result -= total;
         if root == "Income" {
@@ -132,19 +125,19 @@ fn pnl_report(journal: &Journal, range: DateRange, keep_zero: bool) -> PnlReport
     }
 }
 
-fn pnl_account(
+fn account_balances(
     account: &Account,
     path: &str,
     depth: usize,
     balances: &HashMap<&str, Decimal>,
     keep_zero: bool,
-) -> (Decimal, Vec<PnlRow>) {
+) -> (Decimal, Vec<AccountBalanceRow>) {
     let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
     let mut descendants = Vec::new();
     for child in &account.children {
         let child_path = format!("{path}/{}", child.name);
         let (child_total, child_rows) =
-            pnl_account(child, &child_path, depth + 1, balances, keep_zero);
+            account_balances(child, &child_path, depth + 1, balances, keep_zero);
         total += child_total;
         descendants.extend(child_rows);
     }
@@ -153,7 +146,7 @@ fn pnl_account(
     // Keep ancestors of active children even when their amounts cancel out.
     // Breakdown columns need the complete tree so their rows stay aligned.
     if keep_zero || depth == 0 || !total.is_zero() || !descendants.is_empty() {
-        rows.push(PnlRow {
+        rows.push(AccountBalanceRow {
             account: account.name.clone(),
             depth,
             amount: total,
@@ -164,16 +157,9 @@ fn pnl_account(
     (total, rows)
 }
 
-pub struct BsRow {
-    pub account: String,
-    pub depth: usize,
-    pub amount: Decimal,
-    pub direct: Decimal,
-}
-
 pub struct BsReport {
     pub range: DateRange,
-    pub rows: Vec<BsRow>,
+    pub rows: Vec<AccountBalanceRow>,
 }
 
 /// Summarize balances through the range's upper bound, including accumulated result in equity.
@@ -183,14 +169,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
         from: None,
         to: range.to,
     };
-    let mut balances = HashMap::new();
-    for transaction in range.transactions(journal) {
-        for posting in &transaction.postings {
-            *balances
-                .entry(posting.account.as_str())
-                .or_insert(Decimal::ZERO) += posting.amount;
-        }
-    }
+    let mut balances = collect_balances(journal, range);
 
     // Use the same unbounded-start selection: equity needs accumulated, not period profit.
     let net_result = pnl(journal, range).net_result;
@@ -203,7 +182,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
             .accounts
             .find_account(root)
             .expect("built-in root account");
-        let (_, mut section) = bs_account(account, root, 0, &balances);
+        let (_, mut section) = account_balances(account, root, 0, &balances, false);
         if root != "Assets" {
             for row in &mut section {
                 row.amount = -row.amount;
@@ -212,7 +191,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
         }
         rows.extend(section);
         if root == "Equity" && !net_result.is_zero() {
-            rows.push(BsRow {
+            rows.push(AccountBalanceRow {
                 account: "Net Result".to_string(),
                 depth: 1,
                 amount: net_result,
@@ -224,33 +203,16 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
     BsReport { range, rows }
 }
 
-fn bs_account(
-    account: &Account,
-    path: &str,
-    depth: usize,
-    balances: &HashMap<&str, Decimal>,
-) -> (Decimal, Vec<BsRow>) {
-    let mut total = balances.get(path).copied().unwrap_or(Decimal::ZERO);
-    let mut descendants = Vec::new();
-    for child in &account.children {
-        let child_path = format!("{path}/{}", child.name);
-        let (child_total, child_rows) = bs_account(child, &child_path, depth + 1, balances);
-        total += child_total;
-        descendants.extend(child_rows);
+fn collect_balances(journal: &Journal, range: DateRange) -> HashMap<&str, Decimal> {
+    let mut balances = HashMap::new();
+    for transaction in range.transactions(journal) {
+        for posting in &transaction.postings {
+            *balances
+                .entry(posting.account.as_str())
+                .or_insert(Decimal::ZERO) += posting.amount;
+        }
     }
-
-    let mut rows = Vec::new();
-    // Preserve section boundaries and ancestors of active children.
-    if depth == 0 || !total.is_zero() || !descendants.is_empty() {
-        rows.push(BsRow {
-            account: account.name.clone(),
-            depth,
-            amount: total,
-            direct: balances.get(path).copied().unwrap_or(Decimal::ZERO),
-        });
-    }
-    rows.extend(descendants);
-    (total, rows)
+    balances
 }
 
 #[cfg(test)]
@@ -268,6 +230,60 @@ mod tests {
         .unwrap();
         validate_journal(&journal).unwrap();
         journal
+    }
+
+    #[test]
+    fn breakdowns_keep_rows_aligned_when_period_amounts_cancel() {
+        let journal = journal(
+            "2024-01-10 Purchase\n  Assets/Bank -10\n  Expenses/Food 10\n\
+             2024-02-10 Refund\n  Assets/Bank 10\n  Expenses/Food -10\n",
+        );
+        let range = DateRange {
+            from: Some("2024-01-01".parse().unwrap()),
+            to: Some("2024-06-30".parse().unwrap()),
+        };
+        for breakdown in [PeriodBreakdown::Month, PeriodBreakdown::Quarter] {
+            let columns = pnl_breakdown(&journal, range, breakdown).unwrap();
+            let keys = |report: &PnlReport| {
+                report
+                    .rows
+                    .iter()
+                    .map(|row| (row.account.clone(), row.depth))
+                    .collect::<Vec<_>>()
+            };
+            for (_, report) in &columns {
+                assert_eq!(keys(report), keys(&columns[0].1));
+            }
+            let total = &columns.last().unwrap().1;
+            let food = total.rows.iter().find(|row| row.account == "Food").unwrap();
+            assert_eq!(food.amount, Decimal::ZERO);
+            for (index, row) in total.rows.iter().enumerate() {
+                assert_eq!(
+                    row.amount,
+                    columns[..columns.len() - 1]
+                        .iter()
+                        .map(|(_, report)| report.rows[index].amount)
+                        .sum::<Decimal>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pnl_keeps_zero_total_parents_with_active_children_but_hides_unused_accounts() {
+        let journal = journal("2024-01-10 Reclassify\n  Expenses -10\n  Expenses/Food 10\n");
+        let report = pnl(&journal, DateRange::default());
+        assert_eq!(
+            report
+                .rows
+                .iter()
+                .map(|row| row.account.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Income", "Expenses", "Food"]
+        );
+        assert_eq!(report.rows[1].amount, Decimal::ZERO);
+        assert_eq!(report.rows[1].direct, Decimal::from(-10));
+        assert_eq!(report.rows[2].amount, Decimal::from(10));
     }
 
     #[test]

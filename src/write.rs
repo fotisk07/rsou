@@ -5,10 +5,7 @@ use tempfile::NamedTempFile;
 
 pub fn format_accounts(accounts: &Accounts) -> String {
     let mut text = String::new();
-    for root_name in ["Assets", "Liabilities", "Equity", "Income", "Expenses"] {
-        let root = accounts
-            .find_account(root_name)
-            .expect("root accounts always exist");
+    for root in accounts.roots() {
         format_account(root, 0, &mut text);
     }
     text

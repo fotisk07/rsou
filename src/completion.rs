@@ -32,9 +32,9 @@ fn complete_accounts(
 
     let (base, partial) = split_path(prefix);
     if base.is_empty() {
-        let roots = ["Assets", "Liabilities", "Equity", "Income", "Expenses"]
-            .into_iter()
-            .filter_map(|root| journal.accounts.find_account(root))
+        let roots = journal
+            .accounts
+            .roots()
             .filter_map(|account| complete_component(account, base, partial, adding));
         let aliases = journal
             .aliases
