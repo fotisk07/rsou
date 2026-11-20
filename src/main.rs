@@ -35,12 +35,16 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
     // Initialization must work before a journal exists.
     if let Commands::Init {
         name,
+        author,
         year,
         currency,
     } = cli.command
     {
         let metadata = JournalMetadata {
             name: name.trim().to_string(),
+            author: author
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
             year,
             currency,
         };

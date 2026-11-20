@@ -246,7 +246,7 @@ mod tests {
 
     fn journal(transactions: &str) -> Journal {
         let journal = parse_journal(&format!(
-            "[JOURNAL]\nname: Tests\nyear: 2024\ncurrency: EUR\n\
+            "[JOURNAL]\nname: Tests\nauthor:\nyear: 2024\ncurrency: EUR\n\
              [ACCOUNTS]\nAssets\n  Bank\n    Checking\n  BankOther\n\
              Liabilities\n  Loan\nEquity\n  Capital\nIncome\n  Sales\n\
              Expenses\n  Food\n[TRANSACTIONS]\n{transactions}"

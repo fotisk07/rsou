@@ -34,10 +34,15 @@ fn format_transaction(transaction: &Transaction, text: &mut String) {
 
 fn format_journal(journal: &Journal) -> String {
     // Metadata
-    let mut text = format!(
-        "[JOURNAL]\n\nname: {}\nyear: {}\ncurrency: {}\n\n",
-        journal.metadata.name, journal.metadata.year, journal.metadata.currency,
-    );
+    let mut text = format!("[JOURNAL]\n\nname: {}\n", journal.metadata.name);
+    text.push_str(&format!(
+        "author: {}\n",
+        journal.metadata.author.as_deref().unwrap_or_default()
+    ));
+    text.push_str(&format!(
+        "year: {}\ncurrency: {}\n\n",
+        journal.metadata.year, journal.metadata.currency
+    ));
 
     // Accounts
     text.push_str("[ACCOUNTS]\n\n");

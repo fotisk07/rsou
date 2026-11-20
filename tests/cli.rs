@@ -7,6 +7,7 @@ fn journal_file() -> (tempfile::TempDir, std::path::PathBuf) {
         &path,
         "[JOURNAL]
 name: Test
+author:
 year: 2024
 currency: EUR
 [ACCOUNTS]

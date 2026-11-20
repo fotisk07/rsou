@@ -23,6 +23,8 @@ To create your own `journal.sou`
 sou init
 ```
 
+Every journal must include an `author:` line under `[JOURNAL]`, but the name may be blank. Use `sou init --author "Your name"` to set it; `sou init` without a name writes an empty `author:` line. PDFs show the author only when a name is present. Older journals need this line added before they can be used.
+
 You can create your accounts using `add` and post with `post`.
 
 ```sh

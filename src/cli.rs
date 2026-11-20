@@ -35,6 +35,9 @@ pub(crate) enum Commands {
         /// Journal name.
         #[arg(long, default_value = "Personal journal")]
         name: String,
+        /// Journal author, included in PDF reports.
+        #[arg(long)]
+        author: Option<String>,
         /// Journal year.
         #[arg(short = 'y', long, default_value_t = i32::from(Zoned::now().year()), value_parser = clap::value_parser!(i32).range(1..=9999))]
         year: i32,

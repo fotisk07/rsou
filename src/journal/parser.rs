@@ -269,6 +269,7 @@ fn parse_recurring(
 
 fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetadata, ParseError> {
     let mut name: Option<String> = None;
+    let mut author: Option<String> = None;
     let mut year: Option<i32> = None;
     let mut currency: Option<String> = None;
     for (index, line) in header_text.lines().enumerate() {
@@ -291,6 +292,21 @@ fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetad
                     return Err(ParseError::at(line_number, "No values"));
                 }
                 name = Some(value.to_string());
+            }
+            "author" => {
+                if author.is_some() {
+                    return Err(ParseError::at(line_number, "Duplicate key metadata"));
+                }
+                if value
+                    .chars()
+                    .any(|c| c.is_control() || matches!(c, '[' | ']'))
+                {
+                    return Err(ParseError::at(
+                        line_number,
+                        "author must contain no control characters or brackets",
+                    ));
+                }
+                author = Some(value.to_string());
             }
             "year" => {
                 if year.is_some() {
@@ -327,8 +343,12 @@ fn parse_metadata(header_text: &str, section_line: usize) -> Result<JournalMetad
             }
         }
     }
+    let author = author.ok_or_else(|| {
+        ParseError::new("missing metadata field `author`; add `author:` (a name is optional)")
+    })?;
     Ok(JournalMetadata {
         name: name.ok_or_else(|| ParseError::new("missing metadata field `name`"))?,
+        author: (!author.is_empty()).then_some(author),
         year: year.ok_or_else(|| ParseError::new("missing metadata field `year`"))?,
         currency: currency.ok_or_else(|| ParseError::new("missing metadata field `currency`"))?,
     })

@@ -121,6 +121,17 @@ pub fn validate_metadata(metadata: &JournalMetadata) -> Result<(), String> {
                 .to_string(),
         );
     }
+    if let Some(author) = &metadata.author
+        && (author.trim().is_empty()
+            || author
+                .chars()
+                .any(|c| c.is_control() || matches!(c, '[' | ']')))
+    {
+        return Err(
+            "journal author must be nonempty and contain no control characters or brackets"
+                .to_string(),
+        );
+    }
     if !(1..=9999).contains(&metadata.year) {
         return Err("year must be between 1 and 9999".to_string());
     }
@@ -195,7 +206,7 @@ mod tests {
     #[test]
     fn transactions_require_balanced_postings_to_known_accounts_in_whole_cents() {
         let journal = parse_journal(
-            "[JOURNAL]\nname: Test\nyear: 2024\ncurrency: EUR\n\
+            "[JOURNAL]\nname: Test\nauthor:\nyear: 2024\ncurrency: EUR\n\
              [ACCOUNTS]\nAssets\nExpenses\n[TRANSACTIONS]\n",
         )
         .unwrap();

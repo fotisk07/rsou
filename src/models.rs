@@ -121,6 +121,7 @@ impl Transaction {
 #[derive(Debug, PartialEq)]
 pub struct JournalMetadata {
     pub name: String,
+    pub author: Option<String>,
     pub year: i32,
     pub currency: String,
 }
