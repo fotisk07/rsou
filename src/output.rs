@@ -269,7 +269,7 @@ fn add_account_row(builder: &mut Builder, name: &str, depth: usize, amount: Deci
     ]);
 }
 
-fn format_period(range: DateRange, year: i32) -> String {
+pub(crate) fn format_period(range: DateRange, year: i32) -> String {
     let from = range
         .from
         .map(format_date)

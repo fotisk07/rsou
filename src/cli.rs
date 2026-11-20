@@ -26,6 +26,14 @@ pub(crate) struct Cli {
     pub(crate) command: Commands,
 }
 
+#[derive(Clone, Copy, clap::ValueEnum, Default)]
+pub(crate) enum ReportFormat {
+    #[default]
+    Text,
+    Xlsx,
+    Csv,
+}
+
 #[derive(Subcommand)]
 pub(crate) enum Commands {
     /// Create a journal; never overwrite.
@@ -57,6 +65,9 @@ pub(crate) enum Commands {
         period: PeriodArgs,
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
+        /// Output format; redirect xlsx output to a file.
+        #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
+        format: ReportFormat,
         /// Break the selected period into monthly columns.
         #[arg(long, conflicts_with = "by_quarter", display_order = 50)]
         by_month: bool,
