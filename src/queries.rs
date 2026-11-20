@@ -164,6 +164,30 @@ pub struct BsReport {
 
 /// Summarize balances through the range's upper bound, including accumulated result in equity.
 pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
+    bs_report(journal, range, false)
+}
+
+/// Cumulative snapshots at each period end, with identical account trees.
+/// Unlike P&L breakdowns, snapshots must never be summed into a Total column.
+pub fn bs_breakdown(
+    journal: &Journal,
+    range: DateRange,
+    breakdown: PeriodBreakdown,
+) -> Result<Vec<(String, BsReport)>, String> {
+    breakdown
+        .periods(range, journal.metadata.year)?
+        .into_iter()
+        .map(|(_, period)| {
+            let cutoff = period.to.expect("periods have an end date");
+            Ok((
+                cutoff.strftime("%d %b %Y").to_string(),
+                bs_report(journal, period, true),
+            ))
+        })
+        .collect()
+}
+
+fn bs_report(journal: &Journal, range: DateRange, keep_zero: bool) -> BsReport {
     // A balance sheet never has a lower bound, even if a caller supplies one.
     let range = DateRange {
         from: None,
@@ -182,7 +206,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
             .accounts
             .find_account(root)
             .expect("built-in root account");
-        let (_, mut section) = account_balances(account, root, 0, &balances, false);
+        let (_, mut section) = account_balances(account, root, 0, &balances, keep_zero);
         if root != "Assets" {
             for row in &mut section {
                 row.amount = -row.amount;
@@ -190,7 +214,7 @@ pub fn bs(journal: &Journal, range: DateRange) -> BsReport {
             }
         }
         rows.extend(section);
-        if root == "Equity" && !net_result.is_zero() {
+        if root == "Equity" && (keep_zero || !net_result.is_zero()) {
             rows.push(AccountBalanceRow {
                 account: "Net Result".to_string(),
                 depth: 1,
@@ -230,6 +254,69 @@ mod tests {
         .unwrap();
         validate_journal(&journal).unwrap();
         journal
+    }
+
+    #[test]
+    fn balance_sheet_snapshots_are_cumulative_aligned_and_stop_at_exact_cutoff() {
+        let journal = journal(
+            "2024-01-01 Capital\n  Assets/Bank 1000\n  Equity/Capital -1000\n\
+             2024-02-29 Income\n  Assets/Bank 100\n  Income/Sales -100\n\
+             2024-03-31 Expense\n  Assets/Bank -100\n  Expenses/Food 100\n\
+             2024-05-15 Borrowing\n  Assets/Bank 500\n  Liabilities/Loan -500\n\
+             2024-05-16 Future income\n  Assets/Bank 900\n  Income/Sales -900\n",
+        );
+        let range = DateRange {
+            from: Some("2024-02-10".parse().unwrap()),
+            to: Some("2024-05-15".parse().unwrap()),
+        };
+        let monthly = bs_breakdown(&journal, range, PeriodBreakdown::Month).unwrap();
+        assert_eq!(
+            monthly
+                .iter()
+                .map(|(label, _)| label.as_str())
+                .collect::<Vec<_>>(),
+            ["29 Feb 2024", "31 Mar 2024", "30 Apr 2024", "15 May 2024"]
+        );
+        let quarterly = bs_breakdown(&journal, range, PeriodBreakdown::Quarter).unwrap();
+        assert_eq!(
+            quarterly
+                .iter()
+                .map(|(label, _)| label.as_str())
+                .collect::<Vec<_>>(),
+            ["31 Mar 2024", "15 May 2024"]
+        );
+        let amount = |report: &BsReport, name: &str| {
+            report
+                .rows
+                .iter()
+                .find(|row| row.account == name)
+                .unwrap()
+                .amount
+        };
+        assert_eq!(amount(&monthly[0].1, "Assets"), Decimal::from(1100));
+        assert_eq!(amount(&monthly[0].1, "Net Result"), Decimal::from(100));
+        assert_eq!(amount(&monthly[1].1, "Net Result"), Decimal::ZERO);
+        for columns in [&monthly, &quarterly] {
+            let keys = |report: &BsReport| {
+                report
+                    .rows
+                    .iter()
+                    .map(|row| (row.account.clone(), row.depth))
+                    .collect::<Vec<_>>()
+            };
+            for (_, report) in columns {
+                assert_eq!(keys(report), keys(&columns[0].1));
+                assert!(report.range.from.is_none());
+                assert_eq!(
+                    amount(report, "Assets"),
+                    amount(report, "Liabilities") + amount(report, "Equity")
+                );
+            }
+            assert_eq!(
+                amount(&columns.last().unwrap().1, "Assets"),
+                Decimal::from(1500)
+            );
+        }
     }
 
     #[test]

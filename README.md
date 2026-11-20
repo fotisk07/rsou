@@ -59,6 +59,16 @@ sou bs --to 30-06
 
 Dates are `DD-MM`, in the journal year. Use `sou <command> --help` for the rest.
 
+Compare balance-sheet snapshots at month- or quarter-end:
+
+```sh
+sou bs --year --by-quarter
+sou bs --quarter 2 --by-month
+sou bs --to 15-05 --by-month
+```
+
+Each column is a cumulative balance at its labelled date, not activity during the period. There is no Total column. An explicit mid-period cutoff produces a final snapshot on that exact date. Without a month/quarter selection, comparisons start in January. The same options work with CSV and XLSX.
+
 Export P&L and balance sheet reports to an Excel/LibreOffice workbook, preserving account indentation and numeric amounts:
 
 ```sh

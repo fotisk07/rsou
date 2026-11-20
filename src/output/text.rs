@@ -161,7 +161,7 @@ pub(super) fn report(report: &Report, depth: usize) -> String {
         (1, HorizontalLine::new('─').intersection('─')),
         (result_row, HorizontalLine::new('─').intersection('─')),
     ]);
-    if report.columns.len() > 1 {
+    if report.has_total_column {
         table.with(style.verticals([(report.columns.len(), VerticalLine::new('│'))]));
     } else {
         table.with(style);

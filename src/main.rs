@@ -123,16 +123,30 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             date,
             depth,
             format,
+            by_month,
+            by_quarter,
         } => {
-            let range = date
-                .request(None)
-                .resolve(journal.metadata.year, Zoned::now().date())?;
-            output::bs(
-                &queries::bs(&journal, range),
-                &journal.metadata,
-                depth,
-                format,
-            )
+            let request = date.request(None);
+            let implicit_start = request.shortcut.is_none();
+            let mut range = request.resolve(journal.metadata.year, Zoned::now().date())?;
+            // The default month-end cutoff should compare from January;
+            // only an explicit month/quarter selection narrows the first column.
+            if implicit_start && (by_month || by_quarter) {
+                range.from = None;
+            }
+            let breakdown = if by_month {
+                Some(dates::PeriodBreakdown::Month)
+            } else if by_quarter {
+                Some(dates::PeriodBreakdown::Quarter)
+            } else {
+                None
+            };
+            let columns = if let Some(breakdown) = breakdown {
+                queries::bs_breakdown(&journal, range, breakdown)?
+            } else {
+                vec![("Amount".to_string(), queries::bs(&journal, range))]
+            };
+            output::bs(&columns, &journal.metadata, depth, format)
         }
         Commands::Ledger {
             account,

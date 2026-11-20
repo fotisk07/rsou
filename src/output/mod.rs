@@ -38,6 +38,7 @@ struct Report {
     title: &'static str,
     period: String,
     columns: Vec<String>,
+    has_total_column: bool,
     rows: Vec<ReportRow>,
 }
 
@@ -150,6 +151,7 @@ pub fn pnl(
     render(
         &Report {
             title: "Profit and Loss",
+            has_total_column: columns.len() > 1,
             period: text::format_period(range, metadata.year),
             columns: columns.iter().map(|(label, _)| label.clone()).collect(),
             rows,
@@ -161,36 +163,52 @@ pub fn pnl(
 }
 
 pub fn bs(
-    report: &BsReport,
+    columns: &[(String, BsReport)],
     metadata: &JournalMetadata,
     depth: usize,
     format: ReportFormat,
 ) -> Result<Option<String>, String> {
-    let source: Vec<_> = report
+    let source: Vec<_> = columns[0]
+        .1
         .rows
         .iter()
-        .map(|row| SourceRow {
+        .enumerate()
+        .map(|(index, row)| SourceRow {
             name: row.account.clone(),
             depth: row.depth,
-            amounts: vec![row.amount],
-            direct: vec![row.direct],
+            amounts: columns
+                .iter()
+                .map(|(_, report)| report.rows[index].amount)
+                .collect(),
+            direct: columns
+                .iter()
+                .map(|(_, report)| report.rows[index].direct)
+                .collect(),
         })
         .collect();
-    let total = report
-        .rows
+    let totals = columns
         .iter()
-        .filter(|row| row.depth == 0 && row.account != "Assets")
-        .map(|row| row.amount)
-        .sum();
+        .map(|(_, report)| {
+            report
+                .rows
+                .iter()
+                .filter(|row| row.depth == 0 && row.account != "Assets")
+                .map(|row| row.amount)
+                .sum()
+        })
+        .collect();
     let mut rows = select_rows(&source, depth);
     rows.push(ReportRow {
         name: "Total Liabilities and Equity".to_string(),
         path: "Total Liabilities and Equity".to_string(),
         depth: 0,
         kind: RowKind::Result,
-        amounts: vec![total],
+        amounts: totals,
     });
-    let at = report
+    let at = columns
+        .last()
+        .expect("at least one balance-sheet column")
+        .1
         .range
         .to
         .map(|date| date.strftime("%d %b %Y").to_string())
@@ -198,8 +216,13 @@ pub fn bs(
     render(
         &Report {
             title: "Balance Sheet",
-            period: format!("As of {at}"),
-            columns: vec!["Amount".to_string()],
+            has_total_column: false,
+            period: if columns.len() > 1 {
+                format!("Snapshots through {at}")
+            } else {
+                format!("As of {at}")
+            },
+            columns: columns.iter().map(|(label, _)| label.clone()).collect(),
             rows,
         },
         metadata,
