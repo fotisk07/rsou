@@ -81,6 +81,17 @@ sou bs --to 31-12 --depth 2 --format xlsx > bs.xlsx
 
 The same date filters and account depth apply. Bold parent rows are subtotals, not additional amounts to sum.
 
+For a print-ready PDF, generated directly in Rust (no browser or external converter):
+
+```sh
+sou pnl --quarter 4 --by-month --format pdf > pnl-q4.pdf
+sou pnl --year --by-quarter --format pdf > pnl-year.pdf
+sou bs --year --format pdf > bs.pdf
+sou bs --year --by-quarter --format pdf > bs-quarterly.pdf
+```
+
+PDF uses the same figures and depth (default 1), embedded fonts, repeated table headers, and page numbers. Wide reports automatically use landscape or A3 paper. PDF output reflects entered transactions only; it does not certify that a period's records are complete.
+
 For plain CSV data instead:
 
 ```sh

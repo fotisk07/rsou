@@ -1,4 +1,5 @@
 mod csv;
+mod pdf;
 mod text;
 mod xlsx;
 
@@ -16,6 +17,7 @@ pub(crate) enum ReportFormat {
     Text,
     Xlsx,
     Csv,
+    Pdf,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -243,19 +245,26 @@ fn render(
         ReportFormat::Csv => csv::report(report)
             .map(Some)
             .map_err(|error| format!("failed exporting report: {error}")),
-        ReportFormat::Xlsx => {
+        ReportFormat::Xlsx | ReportFormat::Pdf => {
+            let extension = if matches!(format, ReportFormat::Pdf) {
+                "pdf"
+            } else {
+                "xlsx"
+            };
             if std::io::stdout().is_terminal() {
-                return Err(
-                    "redirect XLSX output to a file, e.g. sou pnl --format xlsx > pnl.xlsx"
-                        .to_string(),
-                );
+                return Err(format!(
+                    "redirect binary output to a file, e.g. sou pnl --format {extension} > pnl.{extension}"
+                ));
             }
-            let bytes = xlsx::report(report, metadata)
-                .map_err(|error| format!("failed exporting report: {error}"))?;
+            let bytes = match format {
+                ReportFormat::Pdf => pdf::report(report, metadata),
+                _ => xlsx::report(report, metadata).map_err(|error| error.to_string()),
+            }
+            .map_err(|error| format!("failed exporting report: {error}"))?;
             std::io::stdout()
                 .lock()
                 .write_all(&bytes)
-                .map_err(|error| format!("failed writing XLSX: {error}"))?;
+                .map_err(|error| format!("failed writing {extension}: {error}"))?;
             Ok(None)
         }
     }

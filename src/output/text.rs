@@ -192,7 +192,7 @@ fn format_date(date: Date) -> String {
     date.strftime("%d %b %Y").to_string()
 }
 
-fn format_report_amount(amount: Decimal) -> String {
+pub(super) fn format_report_amount(amount: Decimal) -> String {
     let text = format!("{:.2}", amount.abs());
     let (integer, fraction) = text.split_once('.').expect("fixed two-decimal amount");
     let mut grouped = String::new();

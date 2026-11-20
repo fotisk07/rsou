@@ -61,7 +61,7 @@ pub(crate) enum Commands {
         period: PeriodArgs,
         #[command(flatten)]
         shortcuts: PeriodShortcuts,
-        /// Output format; redirect xlsx output to a file.
+        /// Output format; redirect xlsx/pdf output to a file.
         #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
         format: ReportFormat,
         /// Break the selected period into monthly columns.
@@ -88,7 +88,7 @@ pub(crate) enum Commands {
         /// Compare quarter-end balances, ending at the selected cutoff.
         #[arg(long, display_order = 51)]
         by_quarter: bool,
-        /// Output format; redirect xlsx output to a file.
+        /// Output format; redirect xlsx/pdf output to a file.
         #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
         format: ReportFormat,
         /// Account levels; 0 = totals only.
