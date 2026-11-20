@@ -1,6 +1,6 @@
 use super::{Report, ReportRow, RowKind};
 use crate::dates::DateRange;
-use crate::models::RecurringTransaction;
+use crate::models::{Account, Accounts, RecurringTransaction};
 use crate::queries::LedgerReport;
 use jiff::civil::Date;
 use rust_decimal::Decimal;
@@ -12,6 +12,23 @@ use tabled::{
         style::{HorizontalLine, VerticalLine},
     },
 };
+
+pub fn format_accounts(accounts: &Accounts) -> String {
+    fn add_account(account: &Account, depth: usize, text: &mut String) {
+        text.push_str(&"  ".repeat(depth));
+        text.push_str(&account.name);
+        text.push('\n');
+        for child in &account.children {
+            add_account(child, depth + 1, text);
+        }
+    }
+
+    let mut text = String::new();
+    for root in accounts.roots() {
+        add_account(root, 0, &mut text);
+    }
+    text
+}
 
 pub fn format_recurring(templates: &[RecurringTransaction], details: bool) -> String {
     if templates.is_empty() {

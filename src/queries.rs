@@ -218,7 +218,7 @@ fn collect_balances(journal: &Journal, range: DateRange) -> HashMap<&str, Decima
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{parser::parse_journal, validation::validate_journal};
+    use crate::{journal::parse_journal, validation::validate_journal};
 
     fn journal(transactions: &str) -> Journal {
         let journal = parse_journal(&format!(

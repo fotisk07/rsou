@@ -3,7 +3,8 @@ use std::io::{self, Write};
 use std::path::Path;
 use tempfile::NamedTempFile;
 
-pub fn format_accounts(accounts: &Accounts) -> String {
+// Journal syntax is independent of how `sou list` displays accounts.
+fn format_accounts(accounts: &Accounts) -> String {
     let mut text = String::new();
     for root in accounts.roots() {
         format_account(root, 0, &mut text);

@@ -1,27 +1,23 @@
 mod cli;
 mod completion;
 mod dates;
+mod journal;
 mod models;
 mod output;
-mod parser;
 mod queries;
 mod recurring;
 mod validation;
-mod write;
 
 use crate::cli::{Cli, Commands, RecurCommands};
 use crate::models::{
     Account, Accounts, Journal, JournalMetadata, Posting, RecurringTransaction, Transaction,
 };
-use crate::parser::parse_journal;
 use crate::validation::{
-    validate_account_path, validate_journal, validate_metadata, validate_recurring,
-    validate_transaction,
+    validate_account_path, validate_metadata, validate_recurring, validate_transaction,
 };
 use clap::{CommandFactory, Parser};
 use jiff::Zoned;
 use rust_decimal::Decimal;
-use std::fs;
 
 fn main() {
     clap_complete::CompleteEnv::with_factory(Cli::command).complete();
@@ -56,7 +52,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             transactions: Vec::new(),
             recurring_transactions: Vec::new(),
         };
-        write::create_journal(cli.journal_path.clone(), &journal).map_err(|error| {
+        journal::create_journal(cli.journal_path.clone(), &journal).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 format!("{} already exists", cli.journal_path)
             } else {
@@ -66,17 +62,17 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
         return Ok(Some(format!("Created {}.\n", cli.journal_path)));
     }
 
-    let mut journal = load_journal(&cli.journal_path)?;
+    let mut journal = journal::load_journal(&cli.journal_path)?;
 
     match cli.command {
         Commands::Init { .. } => unreachable!("initialization handled before loading"),
         Commands::Sort => {
             journal.sort_transactions();
-            write::write_journal(cli.journal_path, &journal)
+            journal::write_journal(cli.journal_path, &journal)
                 .map_err(|error| format!("failed saving: {error}"))?;
             Ok(Some("Journal sorted.\n".to_string()))
         }
-        Commands::List => Ok(Some(write::format_accounts(&journal.accounts))),
+        Commands::List => Ok(Some(output::format_accounts(&journal.accounts))),
         Commands::Add { account: path } => {
             validate_account_path(&path).map_err(|error| format!("invalid account: {error}"))?;
             let (parent_path, name) = path
@@ -93,7 +89,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 name: name.to_string(),
                 children: Vec::new(),
             });
-            write::write_journal(cli.journal_path, &journal)
+            journal::write_journal(cli.journal_path, &journal)
                 .map_err(|error| format!("failed saving: {error}"))?;
             Ok(None)
         }
@@ -190,7 +186,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
                 ));
             }
             if !dry_run {
-                write::write_journal(cli.journal_path, &journal)
+                journal::write_journal(cli.journal_path, &journal)
                     .map_err(|error| format!("failed saving: {error}"))?;
             }
             Ok(Some(text))
@@ -219,7 +215,7 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             validate_recurring(&journal, &recurring)
                 .map_err(|error| format!("invalid recurring template: {error}"))?;
             journal.recurring_transactions.push(recurring);
-            write::write_journal(cli.journal_path, &journal)
+            journal::write_journal(cli.journal_path, &journal)
                 .map_err(|error| format!("failed saving: {error}"))?;
             Ok(None)
         }
@@ -281,20 +277,6 @@ fn save_transaction(
     validate_transaction(&journal, &transaction)
         .map_err(|error| format!("invalid transaction: {error}"))?;
     journal.transactions.push(transaction);
-    write::write_journal(path, &journal).map_err(|error| format!("failed saving: {error}"))?;
+    journal::write_journal(path, &journal).map_err(|error| format!("failed saving: {error}"))?;
     Ok(None)
-}
-
-fn load_journal(path: &str) -> Result<Journal, String> {
-    let contents =
-        fs::read_to_string(path).map_err(|error| format!("cannot read {path}: {error}"))?;
-
-    let journal = parse_journal(&contents).map_err(|error| match error.line {
-        Some(line) => format!("parse error (line {line}): {}", error.message),
-        None => format!("parse error: {}", error.message),
-    })?;
-
-    validate_journal(&journal).map_err(|error| format!("validation error: {error}"))?;
-
-    Ok(journal)
 }

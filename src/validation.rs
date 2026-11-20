@@ -190,7 +190,7 @@ pub fn validate_journal(journal: &Journal) -> Result<(), ValidationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_journal;
+    use crate::journal::parse_journal;
 
     #[test]
     fn transactions_require_balanced_postings_to_known_accounts_in_whole_cents() {

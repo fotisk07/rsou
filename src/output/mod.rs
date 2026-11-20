@@ -2,7 +2,7 @@ mod csv;
 mod text;
 mod xlsx;
 
-pub use text::{format_ledger, format_recurring};
+pub use text::{format_accounts, format_ledger, format_recurring};
 
 use crate::{
     models::JournalMetadata,

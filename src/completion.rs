@@ -1,4 +1,4 @@
-use crate::{load_journal, models::Account};
+use crate::{journal::load_journal, models::Account};
 use clap_complete::CompletionCandidate;
 use std::ffi::{OsStr, OsString};
 
