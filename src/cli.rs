@@ -89,7 +89,7 @@ pub(crate) enum Commands {
         after_help = "Default: current month; other journal years: all dates."
     )]
     Ledger {
-        /// Account path, e.g. Assets/Bank.
+        /// Account path or alias, e.g. Assets/Bank.
         #[arg(add = ArgValueCompleter::new(completion::accounts))]
         account: String,
         #[command(flatten)]

@@ -149,10 +149,11 @@ fn run(cli: Cli) -> Result<Option<String>, String> {
             let range = period
                 .request(shortcuts.selection())
                 .resolve(journal.metadata.year, Zoned::now().date())?;
-            let report = queries::ledger(&journal, &account, range)
+            let account = journal.resolve_account(&account);
+            let report = queries::ledger(&journal, account, range)
                 .ok_or_else(|| format!("unknown account `{account}`"))?;
             Ok(Some(output::format_ledger(
-                &account,
+                account,
                 &report,
                 journal.metadata.year,
             )))

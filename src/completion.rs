@@ -3,7 +3,7 @@ use clap_complete::CompletionCandidate;
 use std::ffi::{OsStr, OsString};
 
 pub fn accounts(current: &OsStr) -> Vec<CompletionCandidate> {
-    complete_accounts(current, false, false)
+    posting_accounts(current)
 }
 
 pub fn posting_accounts(current: &OsStr) -> Vec<CompletionCandidate> {
